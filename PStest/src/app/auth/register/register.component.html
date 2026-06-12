@@ -1,0 +1,176 @@
+<!-- register.component.html -->
+<div class="page-wrapper">
+
+  <!-- ── Navbar ── -->
+  <nav class="navbar">
+    <div class="brand">
+      <div class="brand-icon">⚡</div>
+      <div class="brand-text">
+        <span class="brand-name">Nexus Peak</span>
+        <span class="brand-sub">RECURIMENT SOLUTIONS</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── Background ── -->
+  <div class="bg-grid"></div>
+  <div class="bg-glow"></div>
+
+  <!-- ── Card ── -->
+  <div class="login-wrapper">
+    <div class="login-card">
+
+      <!-- Header -->
+      <div class="card-header">
+        <div class="header-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+            <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M16 11l1.5 1.5L20 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <h1 class="card-title">Candidate Registration</h1>
+        <p class="card-subtitle">Create your NexGen AI workspace</p>
+      </div>
+
+      <!-- Form -->
+      <form [formGroup]="registerForm" (ngSubmit)="onSubmit()" novalidate>
+
+        <!-- Full name -->
+        <div class="field-group" [class.has-error]="registerForm.get('name')?.invalid && registerForm.get('name')?.touched">
+          <label class="field-label" for="name">Full name</label>
+          <div class="field-input-wrap">
+            <svg class="field-icon" viewBox="0 0 24 24" fill="none">
+              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+            <input id="name" class="field-input" type="text" formControlName="name" placeholder="Your full name" autocomplete="name"/>
+          </div>
+          <div class="field-error" *ngIf="registerForm.get('name')?.invalid && registerForm.get('name')?.touched">
+            <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><line x1="8" y1="5" x2="8" y2="8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11" r="0.75" fill="currentColor"/></svg>
+            <span *ngIf="registerForm.get('name')?.errors?.['required']">Full name is required.</span>
+            <span *ngIf="registerForm.get('name')?.errors?.['minlength']">Minimum 2 characters required.</span>
+          </div>
+        </div>
+
+        <!-- Email -->
+        <div class="field-group" [class.has-error]="registerForm.get('email')?.invalid && registerForm.get('email')?.touched">
+          <label class="field-label" for="email">Email address</label>
+          <div class="field-input-wrap">
+            <svg class="field-icon" viewBox="0 0 24 24" fill="none">
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" stroke-width="1.5"/>
+              <polyline points="22,6 12,13 2,6" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+            <input id="email" class="field-input" type="email" formControlName="email" placeholder="name&#64;domain.com" autocomplete="email"/>
+          </div>
+          <div class="field-error" *ngIf="registerForm.get('email')?.invalid && registerForm.get('email')?.touched">
+            <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><line x1="8" y1="5" x2="8" y2="8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11" r="0.75" fill="currentColor"/></svg>
+            <span *ngIf="registerForm.get('email')?.errors?.['required']">Email address is required.</span>
+            <span *ngIf="registerForm.get('email')?.errors?.['email']">Invalid email format (e.g., name&#64;domain.com).</span>
+          </div>
+        </div>
+
+        <!-- Password -->
+        <div class="field-group" [class.has-error]="registerForm.get('password')?.invalid && registerForm.get('password')?.touched">
+          <label class="field-label" for="password">Password</label>
+          <div class="field-input-wrap">
+            <svg class="field-icon" viewBox="0 0 24 24" fill="none">
+              <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M7 11V7a5 5 0 0110 0v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <input id="password" class="field-input" [type]="showPassword ? 'text' : 'password'" formControlName="password" placeholder="Minimum 6 characters" autocomplete="new-password"/>
+            <button type="button" class="toggle-password" (click)="showPassword = !showPassword">
+              <svg *ngIf="!showPassword" viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"/></svg>
+              <svg *ngIf="showPassword" viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+
+          <!-- Password strength bar -->
+          <div class="strength-bar-wrap" *ngIf="registerForm.get('password')?.value">
+            <div class="strength-bar">
+              <div class="strength-fill" [class]="passwordStrength.cls" [style.width]="passwordStrength.width"></div>
+            </div>
+            <span class="strength-label" [class]="passwordStrength.cls">{{ passwordStrength.label }}</span>
+          </div>
+
+          <div class="field-error" *ngIf="registerForm.get('password')?.invalid && registerForm.get('password')?.touched">
+            <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><line x1="8" y1="5" x2="8" y2="8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11" r="0.75" fill="currentColor"/></svg>
+            <span *ngIf="registerForm.get('password')?.errors?.['required']">Password is required.</span>
+            <span *ngIf="registerForm.get('password')?.errors?.['minlength']">Minimum 6 characters required.</span>
+          </div>
+        </div>
+
+        <!-- Confirm password -->
+        <div class="field-group"
+          [class.has-error]="(registerForm.hasError('mismatch') || registerForm.get('confirmPassword')?.errors?.['required']) && registerForm.get('confirmPassword')?.touched">
+          <label class="field-label" for="confirmPassword">Confirm password</label>
+          <div class="field-input-wrap">
+            <svg class="field-icon" viewBox="0 0 24 24" fill="none">
+              <rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M7 11V7a5 5 0 0110 0v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M9 16l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <input id="confirmPassword" class="field-input" [type]="showConfirmPassword ? 'text' : 'password'" formControlName="confirmPassword" placeholder="Confirm your password" autocomplete="new-password"/>
+            <button type="button" class="toggle-password" (click)="showConfirmPassword = !showConfirmPassword">
+              <svg *ngIf="!showConfirmPassword" viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"/></svg>
+              <svg *ngIf="showConfirmPassword" viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+          <div class="field-error" *ngIf="registerForm.get('confirmPassword')?.touched">
+            <ng-container *ngIf="registerForm.get('confirmPassword')?.errors?.['required']">
+              <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><line x1="8" y1="5" x2="8" y2="8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11" r="0.75" fill="currentColor"/></svg>
+              Confirmation is required.
+            </ng-container>
+            <ng-container *ngIf="registerForm.hasError('mismatch') && !registerForm.get('confirmPassword')?.errors?.['required']">
+              <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><line x1="8" y1="5" x2="8" y2="8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11" r="0.75" fill="currentColor"/></svg>
+              Passwords do not match.
+            </ng-container>
+          </div>
+        </div>
+
+        <!-- Error banner -->
+        <div class="error-banner" *ngIf="errorMessage" role="alert">
+          <svg class="error-icon" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+            <line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="12" cy="16" r="1" fill="currentColor"/>
+          </svg>
+          <span>{{ errorMessage }}</span>
+        </div>
+
+        <!-- Success banner -->
+        <div class="success-banner" *ngIf="successMessage" role="status">
+          <svg class="error-icon" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+            <path d="M8 12l3 3 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>{{ successMessage }}</span>
+        </div>
+
+        <!-- Submit -->
+        <button type="submit" class="submit-btn" [class.loading]="isLoading" [disabled]="registerForm.invalid || isLoading">
+          <span class="btn-text" *ngIf="!isLoading">
+            <svg viewBox="0 0 24 24" fill="none" width="17" height="17">
+              <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/>
+              <line x1="19" y1="8" x2="19" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <line x1="22" y1="11" x2="16" y2="11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            Create my account
+          </span>
+          <span class="btn-spinner" *ngIf="isLoading">
+            <span class="spinner"></span>
+            Registering…
+          </span>
+        </button>
+
+        <!-- Login link -->
+        <p class="register-row">
+          Already have an account?
+          <a (click)="goToLogin()" class="register-link">Sign in</a>
+        </p>
+
+      </form>
+    </div>
+  </div>
+</div>

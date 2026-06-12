@@ -1,0 +1,572 @@
+<div class="modal-overlay" (click)="close()">
+  <div class="modal-panel" (click)="$event.stopPropagation()">
+
+    <!-- Header -->
+    <div class="modal-header">
+      <div class="modal-header-left">
+        <div class="modal-header-icon">
+          <span class="material-icons">work_outline</span>
+        </div>
+        <div>
+          <h2 class="modal-title">Create new job posting</h2>
+          <p class="modal-subtitle">Step {{ currentStep }} of {{ totalSteps }} — {{ steps[currentStep - 1].label }}</p>
+        </div>
+      </div>
+      <button class="close-btn" (click)="close()">
+        <span class="material-icons">close</span>
+      </button>
+    </div>
+
+    <!-- Stepper -->
+    <div class="stepper">
+      <div class="stepper-track">
+        <div class="stepper-line" [style.width.%]="((currentStep - 1) / (totalSteps - 1)) * 100"></div>
+      </div>
+      <div class="step-nodes">
+        <div *ngFor="let step of steps" class="step-node"
+          [class.active]="step.id === currentStep"
+          [class.done]="step.id < currentStep">
+          <div class="step-circle">
+            <span *ngIf="step.id >= currentStep">{{ step.id }}</span>
+            <span *ngIf="step.id < currentStep" class="material-icons" style="font-size:12px">check</span>
+          </div>
+          <div class="step-label" [class.active-label]="step.id === currentStep">{{ step.label }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div class="modal-body">
+
+      <!-- ─── STEP 1: General Info ─── -->
+      <div *ngIf="currentStep === 1" class="step-content">
+        <div class="step-bar">
+          <span class="step-num">STEP 1</span>
+          <span class="step-name">General info</span>
+        </div>
+
+        <div class="field">
+          <label>Job title</label>
+          <input type="text" [(ngModel)]="form.title" placeholder="e.g. Senior Frontend Engineer" />
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Department</label>
+            <select [(ngModel)]="form.department">
+              <option *ngFor="let d of deptOptions" [value]="d">{{ d }}</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Location</label>
+            <input type="text" [(ngModel)]="form.location" placeholder="e.g. Remote / Paris / Tunis" />
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Contract type</label>
+            <select [(ngModel)]="form.contractType">
+              <option *ngFor="let c of contractOptions" [value]="c">{{ c }}</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Experience level</label>
+            <select [(ngModel)]="form.experienceLevel">
+              <option *ngFor="let e of expOptions" [value]="e">{{ e }}</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>Job description</label>
+          <div class="rich-toolbar">
+            <button class="rich-btn"><b>B</b></button>
+            <button class="rich-btn"><i>I</i></button>
+            <button class="rich-btn"><u>U</u></button>
+            <button class="rich-btn">≡</button>
+            <button class="rich-btn">⊞</button>
+          </div>
+          <textarea [(ngModel)]="form.description" rows="5"
+            placeholder="Describe the role, responsibilities, and expectations…"></textarea>
+        </div>
+      </div>
+
+      <!-- ─── STEP 2: Prerequisites ─── -->
+      <div *ngIf="currentStep === 2" class="step-content">
+        <div class="step-bar">
+          <span class="step-num">STEP 2</span>
+          <span class="step-name">Prerequisites</span>
+        </div>
+        <p class="section-desc">Define the minimum requirements. Candidates who don't meet these will be filtered automatically.</p>
+
+        <div class="prereq-table">
+          <div class="prereq-head">
+            <span>Type</span>
+            <span>Value / threshold</span>
+            <span>Obligatory</span>
+            <span></span>
+          </div>
+
+          <div class="prereq-row" *ngFor="let p of form.prerequisites">
+            <div class="prereq-type-cell">
+              <div class="prereq-icon">
+                <span class="material-icons">{{ p.icon }}</span>
+              </div>
+              <select [(ngModel)]="p.type" (ngModelChange)="onPrereqTypeChange(p)">
+                <option *ngFor="let t of prereqTypes" [value]="t">{{ t }}</option>
+              </select>
+            </div>
+
+            <div class="prereq-value-cell">
+              <!-- Language -->
+              <ng-container *ngIf="p.type === 'Language'">
+                <select [(ngModel)]="customMode[p.id]" (ngModelChange)="onSelectChange(p, $event)">
+                  <option *ngFor="let l of langOptions" [value]="l">{{ l }}</option>
+                  <option value="__other__">✏ Other…</option>
+                </select>
+                <input *ngIf="customMode[p.id] === '__other__'" type="text" [(ngModel)]="p.value"
+                  placeholder="e.g. Japanese (JLPT N2)" class="custom-input" />
+              </ng-container>
+              <!-- Experience -->
+              <ng-container *ngIf="p.type === 'Experience'">
+                <div class="exp-group">
+                  <div class="exp-years">
+                    <input type="number" [(ngModel)]="p.value" min="0" max="30" />
+                    <span class="unit-label">years min.</span>
+                  </div>
+                  <div class="exp-role">
+                    <span class="unit-label">in</span>
+                    <select [(ngModel)]="customMode[p.id + '_role']" (ngModelChange)="onRoleSelectChange(p, $event)">
+                      <option value="">— Any position —</option>
+                      <option *ngFor="let r of roleOptions" [value]="r">{{ r }}</option>
+                      <option value="__other__">✏ Other…</option>
+                    </select>
+                    <input *ngIf="customMode[p.id + '_role'] === '__other__'" type="text" [(ngModel)]="p.role"
+                      placeholder="e.g. Site Reliability Engineer" class="custom-input" />
+                  </div>
+                </div>
+              </ng-container>
+              <!-- Education -->
+              <ng-container *ngIf="p.type === 'Education'">
+                <select [(ngModel)]="customMode[p.id]" (ngModelChange)="onSelectChange(p, $event)">
+                  <option *ngFor="let e of educationOptions" [value]="e">{{ e }}</option>
+                  <option value="__other__">✏ Other…</option>
+                </select>
+                <input *ngIf="customMode[p.id] === '__other__'" type="text" [(ngModel)]="p.value"
+                  placeholder="e.g. DUT Informatique" class="custom-input" />
+              </ng-container>
+              <!-- Location -->
+              <ng-container *ngIf="p.type === 'Location'">
+                <select [(ngModel)]="customMode[p.id]" (ngModelChange)="onSelectChange(p, $event)">
+                  <option *ngFor="let l of locationOptions" [value]="l">{{ l }}</option>
+                  <option value="__other__">✏ Other…</option>
+                </select>
+                <input *ngIf="customMode[p.id] === '__other__'" type="text" [(ngModel)]="p.value"
+                  placeholder="e.g. Based in Morocco (Casablanca)" class="custom-input" />
+              </ng-container>
+              <!-- Certification -->
+              <ng-container *ngIf="p.type === 'Certification'">
+                <select [(ngModel)]="customMode[p.id]" (ngModelChange)="onSelectChange(p, $event)">
+                  <option *ngFor="let c of certificationOptions" [value]="c">{{ c }}</option>
+                  <option value="__other__">✏ Other…</option>
+                </select>
+                <input *ngIf="customMode[p.id] === '__other__'" type="text" [(ngModel)]="p.value"
+                  placeholder="e.g. Certified Kubernetes Security Specialist" class="custom-input" />
+              </ng-container>
+              <!-- Custom -->
+              <ng-container *ngIf="p.type === 'Custom'">
+                <div class="custom-group">
+                  <input type="text" [(ngModel)]="p.customLabel"
+                    placeholder="Requirement name  e.g. Driver's license"
+                    class="custom-input custom-input--label" />
+                  <input type="text" [(ngModel)]="p.value"
+                    placeholder="Value / threshold  e.g. Category B"
+                    class="custom-input" />
+                </div>
+              </ng-container>
+            </div>
+
+            <div class="prereq-toggle-cell">
+              <label class="toggle">
+                <input type="checkbox" [(ngModel)]="p.obligatory" />
+                <span class="slider"></span>
+              </label>
+            </div>
+
+            <div class="prereq-action-cell">
+              <button class="icon-btn danger" (click)="removePrerequisite(p.id)">
+                <span class="material-icons">delete_outline</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <button class="add-row-btn" (click)="addPrerequisite()">
+          <span class="material-icons" style="font-size:16px">add</span> Add prerequisite
+        </button>
+      </div>
+
+      <!-- ─── STEP 3: Technical Skills ─── -->
+      <div *ngIf="currentStep === 3" class="step-content skills-layout">
+        <div class="skills-left">
+          <div class="step-bar">
+            <span class="step-num">STEP 3</span>
+            <span class="step-name">Technical skills &amp; AI weighting</span>
+          </div>
+          <p class="section-desc">Define the technical stack. AI will use these weights to rank candidates.</p>
+
+          <div class="add-skill-header">
+            <span class="active-label-sm">Active skillset</span>
+            <button class="add-skill-btn" (click)="addSkill()">
+              <span class="material-icons" style="font-size:14px">add</span> Add custom skill
+            </button>
+          </div>
+
+          <div class="skill-rows">
+            <div class="skill-row" *ngFor="let skill of form.skills">
+              <div class="skill-top">
+                <input class="skill-name-input" type="text" [(ngModel)]="skill.name" placeholder="Skill name" />
+                <div class="oblig-check">
+                  <span class="oblig-label">Required</span>
+                  <input type="checkbox" [(ngModel)]="skill.obligatory" />
+                </div>
+              </div>
+              <div class="skill-bottom">
+                <input type="range" min="0" max="100" [(ngModel)]="skill.weight" class="skill-slider" />
+                <span class="weight-pct">{{ skill.weight }}%</span>
+                <button class="icon-btn danger" (click)="removeSkill(skill.id)">
+                  <span class="material-icons">delete_outline</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="suggestions-panel" *ngIf="currentSuggestions.length">
+            <p class="suggestions-title">Suggested for <strong>{{ form.department }}</strong></p>
+            <div class="suggestions-chips">
+              <button class="chip" *ngFor="let s of currentSuggestions" (click)="addSuggestedSkill(s)">
+                + {{ s }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="skills-right">
+          <div class="weighting-card">
+            <div class="weighting-title">
+              <span class="material-icons w-icon">donut_large</span> Weight summary
+            </div>
+            <div class="donut-wrap">
+              <svg class="donut" viewBox="0 0 120 120">
+                <circle cx="60" cy="60" r="50" fill="none" stroke="#1e2a3a" stroke-width="10" />
+                <circle cx="60" cy="60" r="50" fill="none"
+                  [attr.stroke]="totalWeight >= 100 ? '#22c55e' : '#3b82f6'"
+                  stroke-width="10"
+                  [attr.stroke-dasharray]="(totalWeight / 100) * 314.16 + ' 314.16'"
+                  stroke-linecap="round"
+                  transform="rotate(-90 60 60)" />
+              </svg>
+              <div class="donut-label">
+                <span class="donut-pct">{{ totalWeight }}%</span>
+                <span class="donut-sub">allocated</span>
+              </div>
+            </div>
+            <div class="weight-stats">
+              <div class="w-stat">
+                <span>Total skills</span>
+                <span class="w-val">{{ form.skills.length }}</span>
+              </div>
+              <div class="w-stat">
+                <span>Required</span>
+                <span class="w-val">{{ essentialSkills }}</span>
+              </div>
+              <div class="w-stat">
+                <span>Optional</span>
+                <span class="w-val">{{ form.skills.length - essentialSkills }}</span>
+              </div>
+            </div>
+            <div class="weight-status"
+              [class.balanced]="totalWeight === 100"
+              [class.unbalanced]="totalWeight !== 100">
+              {{ totalWeight === 100 ? '✓ Balanced' : '⚠ Adjust to reach 100%' }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── STEP 4: Tests & Assignments ─── -->
+      <div *ngIf="currentStep === 4" class="step-content">
+        <div class="step-bar">
+          <span class="step-num">STEP 4</span>
+          <span class="step-name">Tests &amp; assignments</span>
+        </div>
+        <p class="section-desc">
+          Select which test types this job requires and assign the responsible evaluators.
+          They'll be notified automatically when the job is created.
+        </p>
+
+        <!-- RH Test Card -->
+        <div class="test-assign-card" [class.active]="form.testAssignments.rhTest.enabled">
+          <div class="test-card-header">
+            <div class="test-card-left">
+              <div class="test-card-icon rh-icon">
+                <span class="material-icons">group</span>
+              </div>
+              <div>
+                <div class="test-card-title">RH / Psychometric test</div>
+                <div class="test-card-sub">Personality, behavior &amp; motivation assessment</div>
+              </div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" [(ngModel)]="form.testAssignments.rhTest.enabled" />
+              <span class="slider"></span>
+            </label>
+          </div>
+          <ng-container *ngIf="form.testAssignments.rhTest.enabled">
+            <hr class="card-divider" />
+            <label class="assign-label">Assigned RH agents</label>
+            <div class="assignee-row">
+              <div class="chip-person" *ngFor="let uid of form.testAssignments.rhTest.assignedTo">
+                <span class="material-icons" style="font-size:14px">account_circle</span>
+                {{ getAgentLabel(uid) }}
+                <button class="remove-chip" (click)="removeAssignee('rh', uid)">×</button>
+              </div>
+              <select class="add-agent-select" (change)="addAssignee('rh', $event)">
+                <option value="">+ Add agent</option>
+                <option *ngFor="let a of getUnassigned('rh')" [value]="a.id">
+                  {{ a.name || a.email }} ({{ a.role }})
+                </option>
+              </select>
+            </div>
+            <div class="deadline-row">
+              <label class="deadline-label">Test creation deadline</label>
+              <input type="date" [(ngModel)]="form.testAssignments.rhTest.deadline" />
+            </div>
+            <div class="notif-hint">
+              <span class="notif-badge email">Email</span>
+              <span class="notif-badge inapp">In-app</span>
+              Notifications sent to all assigned agents on job creation.
+              <span class="notif-badge deadline" *ngIf="form.testAssignments.rhTest.deadline">
+                Deadline reminder
+              </span>
+            </div>
+          </ng-container>
+        </div>
+
+        <!-- Technical Test Card -->
+        <div class="test-assign-card" [class.active]="form.testAssignments.technicalTest.enabled">
+          <div class="test-card-header">
+            <div class="test-card-left">
+              <div class="test-card-icon tech-icon">
+                <span class="material-icons">code</span>
+              </div>
+              <div>
+                <div class="test-card-title">Technical test</div>
+                <div class="test-card-sub">Coding challenges, QCM &amp; problem solving</div>
+              </div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" [(ngModel)]="form.testAssignments.technicalTest.enabled" />
+              <span class="slider"></span>
+            </label>
+          </div>
+          <ng-container *ngIf="form.testAssignments.technicalTest.enabled">
+            <hr class="card-divider" />
+            <label class="assign-label">Assigned technical evaluators</label>
+            <div class="assignee-row">
+              <div class="chip-person" *ngFor="let uid of form.testAssignments.technicalTest.assignedTo">
+                <span class="material-icons" style="font-size:14px">account_circle</span>
+                {{ getAgentLabel(uid) }}
+                <button class="remove-chip" (click)="removeAssignee('tech', uid)">×</button>
+              </div>
+              <select class="add-agent-select" (change)="addAssignee('tech', $event)">
+                <option value="">+ Add evaluator</option>
+                <option *ngFor="let a of getUnassigned('tech')" [value]="a.id">
+                  {{ a.name || a.email }} ({{ a.role }})
+                </option>
+              </select>
+            </div>
+            <div class="deadline-row">
+              <label class="deadline-label">Test creation deadline</label>
+              <input type="date" [(ngModel)]="form.testAssignments.technicalTest.deadline" />
+            </div>
+            <div class="notif-hint">
+              <span class="notif-badge email">Email</span>
+              <span class="notif-badge inapp">In-app</span>
+              Notifications sent to all assigned evaluators on job creation.
+              <span class="notif-badge deadline" *ngIf="form.testAssignments.technicalTest.deadline">
+                Deadline reminder
+              </span>
+            </div>
+          </ng-container>
+        </div>
+
+        <!-- Test Validity Period -->
+        <div class="test-period-card">
+          <div class="test-card-header">
+            <div class="test-card-left">
+              <div class="test-card-icon period-icon">
+                <span class="material-icons">timer</span>
+              </div>
+              <div>
+                <div class="test-card-title">Test validity period</div>
+                <div class="test-card-sub">Define when candidates can take the tests</div>
+              </div>
+            </div>
+          </div>
+          <div class="period-fields">
+            <div class="field">
+              <label>Start date</label>
+              <input type="date" [(ngModel)]="form.testPeriod.start" [min]="todayIso" />
+            </div>
+            <div class="field">
+              <label>End date</label>
+              <input type="date" [(ngModel)]="form.testPeriod.end"
+                [min]="form.testPeriod.start || todayIso" />
+            </div>
+          </div>
+          <div *ngIf="testPeriodDurationDays !== null" class="period-hint">
+            <span class="material-icons" style="font-size:14px;vertical-align:-2px">info_outline</span>
+            Duration: {{ testPeriodDurationDays }} day(s)
+          </div>
+          <div *ngIf="!testPeriodValid" class="period-error">
+            End date must be after start date.
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── STEP 5: Interview Assignments ─── -->
+      <div *ngIf="currentStep === 5" class="step-content">
+        <div class="step-bar">
+          <span class="step-num">STEP 5</span>
+          <span class="step-name">Interview assignments</span>
+        </div>
+        <p class="section-desc">
+          Assign interviewers for the RH and technical interviews.
+          They'll be notified automatically when the job is created.
+        </p>
+
+        <!-- RH Interview Card -->
+        <div class="test-assign-card" [class.active]="form.intervAssignments.rhTest.enabled">
+          <div class="test-card-header">
+            <div class="test-card-left">
+              <div class="test-card-icon rh-icon">
+                <span class="material-icons">group</span>
+              </div>
+              <div>
+                <div class="test-card-title">RH interview</div>
+                <div class="test-card-sub">Behavioral &amp; motivational interview</div>
+              </div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" [(ngModel)]="form.intervAssignments.rhTest.enabled" />
+              <span class="slider"></span>
+            </label>
+          </div>
+          <ng-container *ngIf="form.intervAssignments.rhTest.enabled">
+            <hr class="card-divider" />
+            <label class="assign-label">Assigned RH interviewers</label>
+            <div class="assignee-row">
+              <div class="chip-person" *ngFor="let uid of form.intervAssignments.rhTest.assignedTo">
+                <span class="material-icons" style="font-size:14px">account_circle</span>
+                {{ getAgentLabel(uid) }}
+                <button class="remove-chip" (click)="removeRhInterviewAssignee(uid)">×</button>
+              </div>
+              <select class="add-agent-select" (change)="addRhInterviewAssignee($event)">
+                <option value="">+ Add interviewer</option>
+                <option *ngFor="let a of getUnassignedRhInterviewers()" [value]="a.id">
+                  {{ a.name || a.email }} ({{ a.role }})
+                </option>
+              </select>
+            </div>
+            <div class="deadline-row">
+              <label class="deadline-label">Scheduling deadline</label>
+              <input type="date" [(ngModel)]="form.intervAssignments.rhTest.deadline" />
+            </div>
+            <div class="notif-hint">
+              <span class="notif-badge email">Email</span>
+              <span class="notif-badge inapp">In-app</span>
+              Notifications sent to all assigned interviewers on job creation.
+              <span class="notif-badge deadline" *ngIf="form.intervAssignments.rhTest.deadline">
+                Deadline reminder
+              </span>
+            </div>
+          </ng-container>
+        </div>
+
+        <!-- Technical Interview Card -->
+        <div class="test-assign-card" [class.active]="form.intervAssignments.technicalTest.enabled">
+          <div class="test-card-header">
+            <div class="test-card-left">
+              <div class="test-card-icon tech-icon">
+                <span class="material-icons">terminal</span>
+              </div>
+              <div>
+                <div class="test-card-title">Technical interview</div>
+                <div class="test-card-sub">Technical skills &amp; problem solving</div>
+              </div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" [(ngModel)]="form.intervAssignments.technicalTest.enabled" />
+              <span class="slider"></span>
+            </label>
+          </div>
+          <ng-container *ngIf="form.intervAssignments.technicalTest.enabled">
+            <hr class="card-divider" />
+            <label class="assign-label">Assigned technical interviewers</label>
+            <div class="assignee-row">
+              <div class="chip-person" *ngFor="let uid of form.intervAssignments.technicalTest.assignedTo">
+                <span class="material-icons" style="font-size:14px">account_circle</span>
+                {{ getAgentLabel(uid) }}
+                <button class="remove-chip" (click)="removeTechInterviewAssignee(uid)">×</button>
+              </div>
+              <select class="add-agent-select" (change)="addTechInterviewAssignee($event)">
+                <option value="">+ Add evaluator</option>
+                <option *ngFor="let a of getUnassignedTechInterviewers()" [value]="a.id">
+                  {{ a.name || a.email }} ({{ a.role }})
+                </option>
+              </select>
+            </div>
+            <div class="deadline-row">
+              <label class="deadline-label">Scheduling deadline</label>
+              <input type="date" [(ngModel)]="form.intervAssignments.technicalTest.deadline" />
+            </div>
+            <div class="notif-hint">
+              <span class="notif-badge email">Email</span>
+              <span class="notif-badge inapp">In-app</span>
+              Notifications sent to all assigned evaluators on job creation.
+              <span class="notif-badge deadline" *ngIf="form.intervAssignments.technicalTest.deadline">
+                Deadline reminder
+              </span>
+            </div>
+          </ng-container>
+        </div>
+
+        <!-- Submit error -->
+        <div *ngIf="submitError" class="submit-error">
+          <span class="material-icons" style="font-size:16px;vertical-align:-2px">error_outline</span>
+          {{ submitError }}
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="modal-footer">
+      <button class="btn-cancel" (click)="close()">Cancel</button>
+      <div class="footer-right">
+        <button class="btn-prev" (click)="previous()" [disabled]="currentStep === 1">
+          <span class="material-icons" style="font-size:15px">arrow_back</span> Previous
+        </button>
+        <button *ngIf="currentStep < totalSteps" class="btn-next" (click)="next()">
+          Next <span class="material-icons" style="font-size:15px">arrow_forward</span>
+        </button>
+        <button type="button" *ngIf="currentStep === totalSteps" class="btn-create"
+          (click)="createJob()" [disabled]="isSubmitting">
+          <span class="material-icons" style="font-size:15px">check</span>
+          <span *ngIf="!isSubmitting">Create job</span>
+          <span *ngIf="isSubmitting">Creating…</span>
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>

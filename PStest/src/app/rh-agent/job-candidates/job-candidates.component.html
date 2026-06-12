@@ -1,0 +1,284 @@
+<!-- job-candidates.component.html -->
+<div class="candidates-page">
+
+  <!-- ── Header ── -->
+  <div class="page-header">
+    <button class="back-btn" (click)="goBack()">
+      <span class="back-arrow">←</span> Back to Jobs
+    </button>
+    <div class="header-info">
+      <div class="job-badge" [ngClass]="job?.department?.toLowerCase()">
+        {{ deptIcon(job?.department) }} {{ job?.department }}
+      </div>
+      <h1 class="page-title">{{ job?.title }}</h1>
+      <p class="page-sub">
+        <span *ngIf="job?.location">📍 {{ job?.location }}</span>
+        <span *ngIf="job?.contractType">📄 {{ job?.contractType }}</span>
+        <span *ngIf="job?.experienceLevel">⭐ {{ job?.experienceLevel }}</span>
+      </p>
+    </div>
+    <div class="header-stats">
+      <div class="hstat">
+        <span class="hstat-num">{{ candidates.length }}</span>
+        <span class="hstat-lbl">Total</span>
+      </div>
+      <div class="hstat">
+        <span class="hstat-num">{{ preSelectedCount }}</span>
+        <span class="hstat-lbl">Pre-selected</span>
+      </div>
+      <div class="hstat">
+        <span class="hstat-num">{{ avgScore !== null ? avgScore + '%' : 'N/A' }}</span>
+        <span class="hstat-lbl">Avg AI Score</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Filters ── -->
+  <div class="filters-bar">
+    <div class="search-wrap">
+      <span class="si">🔍</span>
+      <input type="text" placeholder="Search candidates..." [(ngModel)]="searchTerm" />
+    </div>
+    <select [(ngModel)]="filterStatus">
+      <option value="">All Statuses</option>
+      <option value="Pending">Pending</option>
+      <option value="In Review">In Review</option>
+      <option value="Interview">Interview</option>
+      <option value="Accepted">Accepted</option>
+      <option value="Rejected">Rejected</option>
+    </select>
+    <select [(ngModel)]="filterPreselect">
+      <option value="">All</option>
+      <option value="yes">Pre-selected</option>
+      <option value="no">Not pre-selected</option>
+    </select>
+    <select [(ngModel)]="sortBy">
+      <option value="score">Sort: AI Score</option>
+      <option value="name">Sort: Name</option>
+      <option value="date">Sort: Date</option>
+    </select>
+  </div>
+
+  <!-- ── Loading ── -->
+  <div class="loading-state" *ngIf="loading">
+    <div class="spinner"></div>
+    <span>Loading candidates…</span>
+  </div>
+
+  <!-- ── Empty ── -->
+  <div class="empty-state" *ngIf="!loading && filteredCandidates().length === 0">
+    <div class="empty-icon">👤</div>
+    <p>No candidates found</p>
+    <span>Applications will appear here once submitted.</span>
+  </div>
+
+  <!-- ── Candidates Table ── -->
+  <div class="table-wrap" *ngIf="!loading && filteredCandidates().length > 0">
+    <table class="cand-table">
+      <thead>
+        <tr>
+          <th>Candidate</th>
+          <th>Location</th>
+          <th>Experience</th>
+          <th>AI Score</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let c of filteredCandidates()" [class.preselected-row]="c.preSelected">
+          <td class="cand-cell">
+            <div class="avatar" [style.background]="c.avatarColor || '#4f6ef7'">
+              {{ getInitials(c.name || c.email) }}
+            </div>
+            <div class="cand-info">
+              <div class="cand-name">{{ c.name || 'Unknown' }}</div>
+              <div class="cand-email">{{ c.email }}</div>
+            </div>
+          </td>
+          <td>
+            <span class="chip" *ngIf="c.location">📍 {{ c.location }}</span>
+            <span class="no-data" *ngIf="!c.location">—</span>
+          </td>
+          <td>
+            <span class="chip" *ngIf="c.experience">💼 {{ c.experience }} yrs</span>
+            <span class="no-data" *ngIf="!c.experience">—</span>
+          </td>
+          <td>
+            <div class="score-cell" (click)="openScorePanel(c)" title="View AI Analysis">
+              <div class="score-ring" [ngClass]="getScoreClass(c.aiMatchScore)">
+                <span class="score-val">{{ c.aiMatchScore !== null ? c.aiMatchScore + '%' : 'N/A' }}</span>
+              </div>
+              <span class="score-label" [ngClass]="getScoreClass(c.aiMatchScore)">
+                {{ getScoreLabel(c.aiMatchScore) }}
+              </span>
+            </div>
+          </td>
+          <td>
+            <span class="status-badge" [ngClass]="getStatusClass(c.applicationStatus)">
+              {{ c.applicationStatus || 'Pending' }}
+            </span>
+          </td>
+          <td>
+            <div class="action-row">
+              <button
+                class="btn-preselect"
+                [class.active]="c.preSelected"
+                (click)="togglePreselect(c)">
+                {{ c.preSelected ? '✅ Pre-selected' : '⬜ Pre-select' }}
+              </button>
+              <button class="btn-icon" title="View AI Analysis" (click)="openScorePanel(c)">🤖</button>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     AI Score Side Panel (like image 2)
+══════════════════════════════════════════════════════════════ -->
+<div class="panel-overlay" *ngIf="selectedCandidate" (click)="closePanel()">
+  <div class="score-panel" (click)="$event.stopPropagation()">
+
+    <!-- Panel Header -->
+    <div class="panel-header">
+      <div class="panel-avatar" [style.background]="selectedCandidate.avatarColor || '#4f6ef7'">
+        {{ getInitials(selectedCandidate.name || selectedCandidate.email) }}
+      </div>
+      <div class="panel-name-block">
+        <h2 class="panel-name">{{ selectedCandidate.name || selectedCandidate.email }}</h2>
+        <div class="panel-badges">
+          <span class="match-badge" [ngClass]="getScoreClass(selectedCandidate.aiMatchScore)">
+            Match {{ selectedCandidate.aiMatchScore !== null ? selectedCandidate.aiMatchScore + '%' : 'N/A' }}
+          </span>
+          <span class="cv-badge" *ngIf="selectedCandidate.cv">📄 CV attached</span>
+        </div>
+      </div>
+      <button class="close-panel-btn" (click)="closePanel()">✕</button>
+    </div>
+
+    <!-- Tabs -->
+    <div class="panel-tabs">
+      <button [class.active]="panelTab === 'profile'" (click)="panelTab = 'profile'">👤 Profile</button>
+      <button [class.active]="panelTab === 'aimatch'" (click)="panelTab = 'aimatch'">🤖 AI Match</button>
+    </div>
+
+    <!-- Profile Tab -->
+    <div class="panel-body" *ngIf="panelTab === 'profile'">
+      <div class="profile-grid">
+        <div class="prow" *ngIf="selectedCandidate.email">
+          <span class="plbl">Email</span>
+          <span class="pval">{{ selectedCandidate.email }}</span>
+        </div>
+        <div class="prow" *ngIf="selectedCandidate.phone">
+          <span class="plbl">Phone</span>
+          <span class="pval">{{ selectedCandidate.phone }}</span>
+        </div>
+        <div class="prow" *ngIf="selectedCandidate.location">
+          <span class="plbl">Location</span>
+          <span class="pval">📍 {{ selectedCandidate.location }}</span>
+        </div>
+        <div class="prow" *ngIf="selectedCandidate.experience">
+          <span class="plbl">Experience</span>
+          <span class="pval">{{ selectedCandidate.experience }} years</span>
+        </div>
+        <div class="prow">
+          <span class="plbl">Status</span>
+          <span class="status-badge" [ngClass]="getStatusClass(selectedCandidate.applicationStatus)">
+            {{ selectedCandidate.applicationStatus || 'Pending' }}
+          </span>
+        </div>
+        <div class="prow" *ngIf="selectedCandidate.appliedDate">
+          <span class="plbl">Applied</span>
+          <span class="pval">{{ selectedCandidate.appliedDate | date:'mediumDate' }}</span>
+        </div>
+      </div>
+
+      <!-- Skills from CV -->
+      <div class="cv-skills-section" *ngIf="selectedCandidate.cvExtracted?.skills?.length">
+        <h4>Skills from CV</h4>
+        <div class="skills-cloud">
+          <span class="skill-tag" *ngFor="let s of selectedCandidate.cvExtracted.skills">{{ s }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Match Tab -->
+    <div class="panel-body" *ngIf="panelTab === 'aimatch'">
+
+      <!-- Big Score Ring -->
+      <div class="big-score-wrap">
+        <svg class="ring-svg" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+          <circle class="ring-bg" cx="60" cy="60" r="50" />
+          <circle class="ring-fill"
+            cx="60" cy="60" r="50"
+            [ngClass]="getScoreClass(selectedCandidate.aiMatchScore)"
+            [style.stroke-dasharray]="getCircleDash(selectedCandidate.aiMatchScore)"
+            stroke-dashoffset="0" />
+        </svg>
+        <div class="ring-center">
+          <span class="ring-num">{{ selectedCandidate.aiMatchScore !== null ? selectedCandidate.aiMatchScore : 'N/A' }}</span>
+          <span class="ring-denom" *ngIf="selectedCandidate.aiMatchScore !== null">/ 100</span>
+        </div>
+        <div class="ring-label" [ngClass]="getScoreClass(selectedCandidate.aiMatchScore)">
+          {{ getScoreLabel(selectedCandidate.aiMatchScore) }}
+        </div>
+      </div>
+
+      <!-- Score by Dimension -->
+      <div class="dimensions-section" *ngIf="scoreDimensions(selectedCandidate).length > 0">
+        <h4>SCORE BY DIMENSION</h4>
+        <div class="dim-list">
+          <div class="dim-row" *ngFor="let d of scoreDimensions(selectedCandidate)">
+            <span class="dim-name">{{ d.label }}</span>
+            <div class="dim-bar-wrap">
+              <div class="dim-bar" [style.width.%]="d.value" [ngClass]="d.color"></div>
+            </div>
+            <span class="dim-pct">{{ d.value }}%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Matched Skills -->
+      <div class="match-skills-section" *ngIf="getMatchedSkills(selectedCandidate).length > 0">
+        <h4>✅ MATCHED SKILLS</h4>
+        <div class="skills-cloud">
+          <span class="skill-tag matched" *ngFor="let s of getMatchedSkills(selectedCandidate)">{{ s }}</span>
+        </div>
+      </div>
+
+      <!-- Missing Skills -->
+      <div class="miss-skills-section" *ngIf="getMissingSkills(selectedCandidate).length > 0">
+        <h4>❌ MISSING SKILLS</h4>
+        <div class="skills-cloud">
+          <span class="skill-tag missing" *ngFor="let s of getMissingSkills(selectedCandidate)">{{ s }}</span>
+        </div>
+      </div>
+
+      <!-- AI Analysis -->
+      <div class="ai-analysis-box" *ngIf="selectedCandidate.aiAnalysis">
+        <h4>AI ANALYSIS</h4>
+        <p>{{ selectedCandidate.aiAnalysis }}</p>
+      </div>
+
+      <!-- Computed timestamp -->
+      <div class="computed-at" *ngIf="selectedCandidate.appliedDate">
+        Computed {{ selectedCandidate.appliedDate | date:'medium' }}
+      </div>
+    </div>
+
+    <!-- Panel Footer -->
+    <div class="panel-footer">
+      <button class="btn-accept" (click)="preSelectAndClose(selectedCandidate, true)">
+        ✅ Accept Candidate
+      </button>
+      <button class="btn-reject" (click)="preSelectAndClose(selectedCandidate, false)">
+        ✕ Reject Candidate
+      </button>
+    </div>
+
+  </div>
+</div>

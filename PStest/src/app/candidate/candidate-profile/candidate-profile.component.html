@@ -1,0 +1,399 @@
+<div class="profile-container">
+
+  <!-- ── Loading ── -->
+  <div *ngIf="isLoadingProfile" class="state-loading">
+    <div class="pulse-ring"></div>
+    <p>Loading your profile…</p>
+  </div>
+
+  <!-- ── Error ── -->
+  <div *ngIf="profileError && !isLoadingProfile" class="state-error">
+    <span class="icon-err">⚠️</span> {{ profileError }}
+    <button (click)="loadProfile()">Retry</button>
+  </div>
+
+  <!-- ── Main layout ── -->
+  <div *ngIf="!isLoadingProfile && !profileError" class="profile-layout">
+
+    <!-- ════ LEFT SIDEBAR ════ -->
+    <aside class="profile-sidebar">
+      <div class="avatar-wrap">
+        <div class="avatar" [style.background]="profile?.avatarColor || '#6366f1'">
+          {{ avatarInitials }}
+        </div>
+        <div class="avatar-badge">{{ profile?.score ?? 0 }}<small>pts</small></div>
+      </div>
+
+      <h2 class="sidebar-name">{{ displayName }}</h2>
+      <p class="sidebar-email">{{ displayEmail }}</p>
+
+      <div class="quick-stats">
+        <div class="stat-item">
+          <span class="stat-val">{{ profile?.applications?.length ?? 0 }}</span>
+          <span class="stat-lbl">Applications</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-val">{{ profile?.experience ?? 0 }}y</span>
+          <span class="stat-lbl">Experience</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-val">{{ cvExtracted?.skills?.length ?? 0 }}</span>
+          <span class="stat-lbl">Skills</span>
+        </div>
+      </div>
+
+      <!-- Nav tabs -->
+      <nav class="sidebar-nav">
+        <button [class.active]="activeTab === 'cv'" (click)="activeTab = 'cv'">
+          <span>📄</span> My CV
+        </button>
+        <button [class.active]="activeTab === 'info'" (click)="activeTab = 'info'">
+          <span>👤</span> Personal Info
+        </button>
+        <button [class.active]="activeTab === 'password'" (click)="activeTab = 'password'">
+          <span>🔒</span> Password
+        </button>
+        <button
+          [class.active]="activeTab === 'skills'"
+          (click)="activeTab = 'skills'"
+          *ngIf="cvExtracted">
+          <span>⚡</span> Extracted Data
+        </button>
+      </nav>
+    </aside>
+
+    <!-- ════ RIGHT MAIN ════ -->
+    <main class="profile-main">
+
+      <!-- ── Tab: CV Upload ── -->
+      <section *ngIf="activeTab === 'cv'" class="tab-panel">
+        <div class="panel-header">
+          <h3>Your CV</h3>
+          <p>Upload a PDF — our AI extracts your data automatically.</p>
+        </div>
+
+        <!-- Current CV -->
+        <div class="cv-current-card" *ngIf="profile?.cv?.originalName">
+          <div class="cv-current-left">
+            <div class="cv-icon-wrap">📄</div>
+            <div>
+              <p class="cv-filename">{{ profile?.cv?.originalName }}</p>
+              <p class="cv-date">Uploaded {{ profile?.cv?.uploadedAt | date:'dd MMM yyyy' }}</p>
+            </div>
+          </div>
+          <span class="cv-badge">Active</span>
+        </div>
+
+        <!-- Drop zone -->
+        <div
+          class="drop-zone"
+          [class.drag-over]="isDragOver"
+          (dragover)="onDragOver($event)"
+          (dragleave)="onDragLeave()"
+          (drop)="onDrop($event)"
+          (click)="triggerFileInput()">
+          <input #cvInput type="file" accept="application/pdf" (change)="onFileSelected($event)" hidden />
+          <div class="drop-icon-wrap">☁️</div>
+          <p class="drop-title">Drag & drop your PDF here</p>
+          <p class="drop-sub">or <u>browse files</u> · Max 10 MB · PDF only</p>
+        </div>
+
+        <!-- Progress -->
+        <div class="progress-wrap" *ngIf="isUploadingCV">
+          <div class="progress-bar">
+            <div class="progress-fill" [style.width.%]="uploadProgress"></div>
+          </div>
+          <span class="progress-pct">{{ uploadProgress }}%</span>
+        </div>
+
+        <!-- Message -->
+        <div class="alert-msg"
+          *ngIf="uploadMessage"
+          [class.success]="uploadMessage.startsWith('✅')"
+          [class.error]="uploadMessage.startsWith('❌')"
+          [class.warn]="uploadMessage.startsWith('⚠️')">
+          {{ uploadMessage }}
+        </div>
+
+        <button
+          class="btn-primary"
+          [disabled]="!selectedFile || isUploadingCV"
+          (click)="uploadCV()">
+          {{ isUploadingCV ? 'Analysing…' : '🤖 Upload & Analyse with AI' }}
+        </button>
+
+        <p class="hint-text" *ngIf="!hasCVUploaded">
+          Your CV is used by our AI to match you with the best job offers.
+        </p>
+      </section>
+
+      <!-- ── Tab: Personal Info ── -->
+      <section *ngIf="activeTab === 'info'" class="tab-panel">
+        <div class="panel-header">
+          <h3>Personal Information</h3>
+          <p>Update your contact details and profile data.</p>
+        </div>
+
+        <div class="success-banner" *ngIf="infoSuccess">✅ {{ infoSuccess }}</div>
+        <div class="error-banner"   *ngIf="infoError">❌ {{ infoError }}</div>
+
+        <form class="edit-form" (ngSubmit)="savePersonalInfo()" #infoForm="ngForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Full Name</label>
+              <input
+                type="text"
+                [(ngModel)]="editForm.name"
+                name="name"
+                placeholder="Your full name"
+                maxlength="80" />
+            </div>
+            <div class="form-group">
+              <label>Email <span class="readonly-badge">Read-only</span></label>
+              <input type="email" [value]="profile?.email" disabled class="input-disabled" />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Phone</label>
+              <input
+                type="tel"
+                [(ngModel)]="editForm.phone"
+                name="phone"
+                placeholder="+216 XX XXX XXX" />
+            </div>
+            <div class="form-group">
+              <label>Location</label>
+              <input
+                type="text"
+                [(ngModel)]="editForm.location"
+                name="location"
+                placeholder="City, Country" />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Years of Experience</label>
+              <input
+                type="number"
+                [(ngModel)]="editForm.experience"
+                name="experience"
+                min="0" max="50"
+                placeholder="0" />
+            </div>
+            <div class="form-group">
+              <label>Avatar Color</label>
+              <div class="color-picker-row">
+                <input
+                  type="color"
+                  [(ngModel)]="editForm.avatarColor"
+                  name="avatarColor"
+                  class="color-input" />
+                <div class="avatar-preview" [style.background]="editForm.avatarColor">
+                  {{ avatarInitials }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="button" class="btn-secondary" (click)="cancelEditInfo()">Cancel</button>
+            <button type="submit" class="btn-primary" [disabled]="isSavingInfo">
+              {{ isSavingInfo ? 'Saving…' : '💾 Save Changes' }}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <!-- ── Tab: Password ── -->
+      <section *ngIf="activeTab === 'password'" class="tab-panel">
+        <div class="panel-header">
+          <h3>Change Password</h3>
+          <p>Choose a strong password to keep your account secure.</p>
+        </div>
+
+        <div class="success-banner" *ngIf="pwSuccess">✅ {{ pwSuccess }}</div>
+        <div class="error-banner"   *ngIf="pwError">❌ {{ pwError }}</div>
+
+        <form class="edit-form" (ngSubmit)="changePassword()" #pwForm="ngForm">
+          <div class="form-group full-width">
+            <label>Current Password</label>
+            <div class="input-pw-wrap">
+              <input
+                [type]="showCurrentPw ? 'text' : 'password'"
+                [(ngModel)]="pwForm2.currentPassword"
+                name="currentPassword"
+                placeholder="Enter current password"
+                required />
+              <button type="button" class="pw-toggle" (click)="showCurrentPw = !showCurrentPw">
+                {{ showCurrentPw ? '🙈' : '👁️' }}
+              </button>
+            </div>
+          </div>
+
+          <div class="form-group full-width">
+            <label>New Password</label>
+            <div class="input-pw-wrap">
+              <input
+                [type]="showNewPw ? 'text' : 'password'"
+                [(ngModel)]="pwForm2.newPassword"
+                name="newPassword"
+                placeholder="At least 8 characters"
+                minlength="8"
+                required />
+              <button type="button" class="pw-toggle" (click)="showNewPw = !showNewPw">
+                {{ showNewPw ? '🙈' : '👁️' }}
+              </button>
+            </div>
+            <div class="pw-strength" *ngIf="pwForm2.newPassword">
+              <div class="strength-bar">
+                <div
+                  class="strength-fill"
+                  [style.width.%]="passwordStrength.score * 25"
+                  [class]="passwordStrength.level">
+                </div>
+              </div>
+              <span class="strength-label" [class]="passwordStrength.level">{{ passwordStrength.label }}</span>
+            </div>
+          </div>
+
+          <div class="form-group full-width">
+            <label>Confirm New Password</label>
+            <div class="input-pw-wrap">
+              <input
+                [type]="showConfirmPw ? 'text' : 'password'"
+                [(ngModel)]="pwForm2.confirmPassword"
+                name="confirmPassword"
+                placeholder="Repeat new password"
+                required />
+              <button type="button" class="pw-toggle" (click)="showConfirmPw = !showConfirmPw">
+                {{ showConfirmPw ? '🙈' : '👁️' }}
+              </button>
+            </div>
+            <p class="mismatch-msg"
+              *ngIf="pwForm2.confirmPassword && pwForm2.newPassword !== pwForm2.confirmPassword">
+              ⚠️ Passwords do not match.
+            </p>
+          </div>
+
+          <div class="form-actions">
+            <button type="button" class="btn-secondary" (click)="resetPwForm()">Clear</button>
+            <button
+              type="submit"
+              class="btn-primary"
+              [disabled]="isChangingPw
+                || pwForm2.newPassword !== pwForm2.confirmPassword
+                || !pwForm2.currentPassword
+                || (pwForm2.newPassword?.length ?? 0) < 8">
+              {{ isChangingPw ? 'Updating…' : '🔒 Update Password' }}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <!-- ── Tab: Extracted Skills ── -->
+      <section *ngIf="activeTab === 'skills' && cvExtracted" class="tab-panel">
+        <div class="panel-header">
+          <h3>AI-Extracted Profile</h3>
+          <p>Data automatically extracted from your CV.</p>
+        </div>
+
+        <div class="extracted-grid">
+
+          <!-- Summary -->
+          <div class="extracted-card wide" *ngIf="cvExtracted.summary">
+            <h4>📝 Summary</h4>
+            <p>{{ cvExtracted.summary }}</p>
+          </div>
+
+          <!-- Skills -->
+          <div class="extracted-card" *ngIf="cvExtracted.skills?.length">
+            <h4>⚡ Skills</h4>
+            <div class="tags-wrap">
+              <span class="tag skill-tag" *ngFor="let s of cvExtracted.skills">{{ s }}</span>
+            </div>
+          </div>
+
+          <!-- Languages — FIX: afficher lang.name + lang.level au lieu de l'objet brut -->
+          <div class="extracted-card" *ngIf="cvExtracted.languages?.length">
+            <h4>🌐 Languages</h4>
+            <div class="tags-wrap">
+              <span class="tag lang-tag" *ngFor="let l of cvExtracted.languages">
+                {{ l.name }}<span *ngIf="l.level">&nbsp;({{ l.level }})</span>
+              </span>
+            </div>
+          </div>
+
+          <!-- Certifications -->
+          <div class="extracted-card" *ngIf="cvExtracted.certifications?.length">
+            <h4>🏅 Certifications</h4>
+            <ul class="simple-list">
+              <li *ngFor="let c of cvExtracted.certifications">{{ c }}</li>
+            </ul>
+          </div>
+
+          <!-- Education — FIX: afficher le badge "En cours" si inProgress -->
+          <div class="extracted-card" *ngIf="cvExtracted.education?.length">
+            <h4>🎓 Education</h4>
+            <div class="timeline-list">
+              <div class="timeline-item" *ngFor="let e of cvExtracted.education">
+                <div class="tl-dot"></div>
+                <div>
+                  <p class="tl-title">
+                    {{ e.degree }}
+                    <span class="badge-inprogress" *ngIf="e.inProgress">En cours</span>
+                  </p>
+                  <p class="tl-sub">
+                    {{ e.institution }}
+                    <span *ngIf="e.year"> · {{ e.year }}</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Experience — FIX: afficher le type stage/job avec badge -->
+          <div class="extracted-card wide" *ngIf="cvExtracted.experience?.length">
+            <h4>💼 Experience</h4>
+            <div class="timeline-list">
+              <div class="timeline-item" *ngFor="let ex of cvExtracted.experience">
+                <div class="tl-dot accent"></div>
+                <div>
+                  <p class="tl-title">
+                    {{ ex.title }}
+                    <span class="tl-company">&#64; {{ ex.company }}</span>
+                    <!-- Badge stage / job -->
+                    <span
+                      class="badge-type"
+                      [class.badge-stage]="ex.type === 'stage'"
+                      [class.badge-job]="ex.type === 'job'">
+                      {{ ex.type === 'stage' ? '🎓 Stage' : '💼 CDI/CDD' }}
+                    </span>
+                  </p>
+                  <p class="tl-sub" *ngIf="ex.duration">{{ ex.duration }}</p>
+                  <p class="tl-desc" *ngIf="ex.description">{{ ex.description }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Years of Experience summary -->
+          <div class="extracted-card" *ngIf="cvExtracted.yearsExperience !== undefined">
+            <h4>📅 Years of Experience</h4>
+            <p class="years-exp-value">
+              {{ cvExtracted.yearsExperience }}
+              <span class="years-exp-label">year{{ cvExtracted.yearsExperience !== 1 ? 's' : '' }}</span>
+            </p>
+            <p class="years-exp-note">
+              (stages counted as 0.5 × duration)
+            </p>
+          </div>
+
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>

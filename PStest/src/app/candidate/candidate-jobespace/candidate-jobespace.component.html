@@ -1,0 +1,337 @@
+<div class="jobspace-container">
+  <!-- Header -->
+  <div class="page-header">
+    <h1>Job Offers</h1>
+    <p>Apply to opportunities that match your profile</p>
+  </div>
+
+  <!-- Loading / Error -->
+  <div *ngIf="isLoading" class="loading-spinner">Loading offers...</div>
+  <div *ngIf="errorMessage && !isLoading" class="error-message">{{ errorMessage }}</div>
+
+  <!-- Filters -->
+  <div class="filters-panel" *ngIf="!isLoading && !errorMessage">
+    <div class="filter-group">
+      <label>Skills</label>
+      <input type="text" [(ngModel)]="filters.skills" (input)="applyFilters()" placeholder="E.g. Angular, Python..." />
+    </div>
+    <div class="filter-group">
+      <label>Location</label>
+      <input type="text" [(ngModel)]="filters.location" (input)="applyFilters()" placeholder="City, remote..." />
+    </div>
+    <div class="filter-group">
+      <label>Contract type</label>
+      <select [(ngModel)]="filters.contractType" (change)="applyFilters()">
+        <option value="">All</option>
+        <option value="Full-time">Full-time</option>
+        <option value="Part-time">Part-time</option>
+        <option value="Contract">Contract</option>
+        <option value="Internship">Internship</option>
+      </select>
+    </div>
+    <button class="btn-reset" (click)="resetFilters()">Reset</button>
+  </div>
+
+  <!-- AI Matching Banner -->
+  <div class="ai-banner" *ngIf="!isLoading && !errorMessage">
+    <div class="ai-banner-text">
+      <span class="ai-icon">🤖</span>
+      <div>
+        <strong>AI Job Matching</strong>
+        <p>Analyse your CV and rank jobs by compatibility score.</p>
+      </div>
+    </div>
+    <div class="ai-banner-actions">
+      <button class="btn-ai" (click)="loadAIRecommendations()" [disabled]="isLoadingAI">
+        {{ isLoadingAI ? '⏳ Analysing...' : '✨ Match my CV' }}
+      </button>
+      <button class="btn-reset" *ngIf="viewMode === 'ai'" (click)="switchToAllJobs()">
+        Show all jobs
+      </button>
+    </div>
+  </div>
+  <div class="ai-error" *ngIf="aiErrorMessage">{{ aiErrorMessage }}</div>
+
+  <!-- ===== Mode : All Jobs ===== -->
+  <div class="jobs-grid" *ngIf="!isLoading && !errorMessage && viewMode === 'all'">
+    <div *ngIf="filteredJobs.length === 0" class="no-results">No job offers match your criteria.</div>
+    <div *ngFor="let job of filteredJobs" class="job-card">
+      <div class="job-header">
+        <h3>{{ job.title }}</h3>
+        <span class="contract-badge">{{ getContractLabel(job.contractType) }}</span>
+      </div>
+      <div class="job-company"><span class="icon">🏢</span> NexGen AI HR Solutions</div>
+      <div class="job-location" *ngIf="job.location"><span class="icon">📍</span> {{ job.location }}</div>
+      <div class="job-skills" *ngIf="job.skills?.length">
+        <span class="icon">🔧</span>
+        <span *ngFor="let skill of job.skills" class="skill-tag">{{ skill.name || skill }}</span>
+      </div>
+      <div class="job-deadline" *ngIf="job.deadline">
+        <span class="icon">⏰</span> Deadline: {{ formatDeadline(job.deadline) }}
+      </div>
+      <div class="card-buttons">
+        <button class="btn-details" (click)="openJobDetails(job)">View details</button>
+        <button class="btn-apply" (click)="openApplyModal(job)">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== AI Loading ===== -->
+  <div class="ai-loading" *ngIf="isLoadingAI">
+    <div class="spinner"></div>
+    <p>Analysing your CV against {{ allJobs.length }} job offers…</p>
+  </div>
+
+<!-- ===== Mode : AI Recommendations ===== -->
+<div class="jobs-grid" *ngIf="!isLoadingAI && viewMode === 'ai'">
+  <div *ngIf="recommendedJobs.length === 0" class="no-results">
+    No recommendations found. Make sure your CV is uploaded.
+  </div>
+
+  <div *ngFor="let rec of recommendedJobs; let i = index" class="job-card ai-card">
+
+    <!-- Score badge -->
+    <div class="score-badge" [ngClass]="getScoreClass(rec.score)">
+      {{ rec.score }}%
+    </div>
+
+    <!-- Header -->
+    <div class="job-header">
+      <h3>{{ rec.job.title }}</h3>
+      <span class="contract-badge">{{ getContractLabel(rec.job.contractType) }}</span>
+    </div>
+
+    <div class="job-company"><span class="icon">🏢</span> NexGen AI HR Solutions</div>
+    <div class="job-location" *ngIf="rec.job.location">
+      <span class="icon">📍</span> {{ rec.job.location }}
+    </div>
+
+    <!-- Bloquants -->
+    <div class="blocking-alert" *ngIf="rec.blockedByPrereqs?.length">
+      <span class="icon">🚫</span>
+      <span>Missing required:
+        <strong *ngFor="let b of rec.blockedByPrereqs; let last = last">
+          {{ b.value }}<span *ngIf="!last">, </span>
+        </strong>
+      </span>
+    </div>
+
+    <!-- Bouton pour ouvrir le modal de détails -->
+    <button class="btn-details-match" (click)="openMatchDetails(rec)">
+      View match details
+    </button>
+
+    <!-- Recommendation pill -->
+    <div class="recommendation-pill" [ngClass]="getScoreClass(rec.score)" *ngIf="rec.recommendation">
+      💡 {{ rec.recommendation }}
+    </div>
+
+    <!-- Buttons -->
+    <div class="card-buttons">
+      <button class="btn-details" (click)="openJobDetails(rec.job)">View offer</button>
+    <button class="btn-apply" (click)="openApplyModal(rec.job)"
+  [title]="(rec.blockedByPrereqs?.length ?? 0) > 0 ? 'Missing required prerequisites – you can still apply' : ''">
+  Apply
+</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== MODAL : DÉTAILS DU MATCHING ========== -->
+<div class="modal-backdrop" *ngIf="showMatchModal" (click)="closeMatchModal()">
+  <div class="modal-panel modal-wide" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <div class="header-left">
+        <span class="modal-eyebrow">AI Match Analysis</span>
+        <h2 class="modal-title">{{ selectedMatchForModal?.job?.title }}</h2>
+        <div class="score-global-badge" [ngClass]="getScoreClass(selectedMatchForModal?.score ?? 0)">
+          Overall match: {{ selectedMatchForModal?.score ?? 0 }}%
+        </div>
+      </div>
+      <button class="close-btn" (click)="closeMatchModal()">✕</button>
+    </div>
+
+    <div class="modal-body" *ngIf="selectedMatchForModal">
+      <!-- Barre de score détaillée -->
+      <div class="score-breakdown">
+        <div class="score-bar-row">
+          <span class="score-label">Global score</span>
+          <div class="score-bar-track">
+            <div class="score-bar-fill" [ngClass]="getScoreClass(selectedMatchForModal.score ?? 0)"
+                 [style.width.%]="selectedMatchForModal.score ?? 0"></div>
+          </div>
+          <span class="score-pct">{{ selectedMatchForModal.score ?? 0 }}%</span>
+        </div>
+
+        <!-- Scores intermédiaires -->
+        <div class="sub-scores" *ngIf="selectedMatchForModal.semanticScore || selectedMatchForModal.experienceScore">
+          <div class="sub-score-item" *ngIf="selectedMatchForModal.semanticScore">
+            <span class="sub-label">Semantic similarity:</span>
+            <span class="sub-value">{{ selectedMatchForModal.semanticScore }}%</span>
+          </div>
+          <div class="sub-score-item" *ngIf="selectedMatchForModal.experienceScore">
+            <span class="sub-label">Experience match:</span>
+            <span class="sub-value">{{ selectedMatchForModal.experienceScore }}%</span>
+          </div>
+          <div class="sub-score-item" *ngIf="selectedMatchForModal.levelScore">
+            <span class="sub-label">Seniority level:</span>
+            <span class="sub-value">{{ selectedMatchForModal.levelScore }}%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Compétences matchées -->
+      <div class="detail-section" *ngIf="selectedMatchForModal.matchedSkills?.length">
+        <div class="detail-title">
+          <span class="dot dot-green"></span> Matched skills ({{ selectedMatchForModal.matchedSkills.length }})
+        </div>
+        <div class="tag-row">
+          <span class="tag tag-green" *ngFor="let s of selectedMatchForModal.matchedSkills">{{ s }}</span>
+        </div>
+      </div>
+
+      <!-- Compétences manquantes -->
+      <div class="detail-section" *ngIf="selectedMatchForModal.missingSkills?.length">
+        <div class="detail-title">
+          <span class="dot dot-red"></span> Missing skills ({{ selectedMatchForModal.missingSkills.length }})
+        </div>
+        <div class="tag-row">
+          <span class="tag tag-red" *ngFor="let s of selectedMatchForModal.missingSkills">{{ s }}</span>
+        </div>
+      </div>
+
+      <!-- Prérequis détaillés -->
+      <div class="detail-section" *ngIf="selectedMatchForModal.prereqDetails?.length">
+        <div class="detail-title">
+          <span class="dot dot-blue"></span> Prerequisites evaluation
+        </div>
+        <div class="prereq-table">
+          <div class="prereq-header">
+            <span>Status</span><span>Type</span><span>Requirement</span><span>Mandatory</span>
+          </div>
+          <div class="prereq-row" *ngFor="let p of selectedMatchForModal.prereqDetails">
+            <span class="prereq-status">{{ p.matched ? '✅' : (p.obligatory ? '🚫' : '⚠️') }}</span>
+            <span class="prereq-type">{{ p.type }}</span>
+            <span class="prereq-label">{{ p.label }}</span>
+            <span class="prereq-badge" [class.required]="p.obligatory">{{ p.obligatory ? 'Required' : 'Optional' }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Analyse LLM -->
+      <div class="detail-section ai-analysis-block" *ngIf="selectedMatchForModal.analysis">
+        <div class="detail-title">🧠 AI Analysis (llama3.2)</div>
+        <p class="analysis-text">{{ selectedMatchForModal.analysis }}</p>
+      </div>
+
+      <!-- Recommendation -->
+      <div class="detail-section" *ngIf="selectedMatchForModal.recommendation">
+        <div class="detail-title">💡 Recommendation</div>
+        <p class="recommendation-text">{{ selectedMatchForModal.recommendation }}</p>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-secondary" (click)="closeMatchModal()">Close</button>
+      <button class="btn-primary" (click)="openApplyModal(selectedMatchForModal!.job); closeMatchModal()"
+              [disabled]="(selectedMatchForModal?.blockedByPrereqs?.length ?? 0) > 0">
+        Apply to this job
+      </button>
+    </div>
+  </div>
+</div>
+  <!-- ========== MODALE : DÉTAILS DE L'OFFRE ========== -->
+  <div class="modal-backdrop" *ngIf="showDetailsModal" (click)="closeDetailsModal()">
+    <div class="modal-panel" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <div class="header-left">
+          <span class="modal-eyebrow">Job Offer</span>
+          <h2 class="modal-title">{{ selectedJobForDetails?.title }}</h2>
+          <div class="header-badges">
+            <span class="status-badge" [ngClass]="selectedJobForDetails?.status">{{ selectedJobForDetails?.status }}</span>
+            <span class="dept-badge" [ngClass]="selectedJobForDetails?.department?.toLowerCase()">{{ selectedJobForDetails?.department }}</span>
+          </div>
+        </div>
+        <button class="close-btn" (click)="closeDetailsModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="meta-row">
+          <div class="meta-item"><span class="meta-icon">📍</span><span>{{ selectedJobForDetails?.location || '—' }}</span></div>
+          <div class="meta-item"><span class="meta-icon">📄</span><span>{{ selectedJobForDetails?.contractType || '—' }}</span></div>
+          <div class="meta-item"><span class="meta-icon">🎯</span><span>{{ selectedJobForDetails?.experienceLevel || '—' }}</span></div>
+          <div class="meta-item"><span class="meta-icon">👥</span><span>{{ selectedJobForDetails?.applicationsCount || 0 }} applicant(s)</span></div>
+        </div>
+        <div class="section" *ngIf="selectedJobForDetails?.description">
+          <h3 class="section-title">Description</h3>
+          <p class="description-text">{{ selectedJobForDetails?.description }}</p>
+        </div>
+        <div class="section" *ngIf="selectedJobForDetails?.prerequisites?.length">
+          <h3 class="section-title">Prerequisites</h3>
+          <div class="tag-list">
+            <span class="tag tag--prereq" *ngFor="let p of selectedJobForDetails?.prerequisites">
+              <strong>{{ p.type }}</strong>: {{ p.value || p.role }}
+              <span class="tag-mandatory" *ngIf="p.obligatory">Required</span>
+            </span>
+          </div>
+        </div>
+        <div class="section" *ngIf="selectedJobForDetails?.skills?.length">
+          <h3 class="section-title">Skills</h3>
+          <div class="skills-grid">
+            <div class="skill-card" *ngFor="let s of selectedJobForDetails?.skills">
+              <div class="skill-name">{{ s.name }}</div>
+              <div class="skill-meta">
+                <div class="skill-level">
+                  <span class="dot" *ngFor="let d of [1,2,3,4,5]" [class.filled]="d <= (s.minLevel ?? 0)"></span>
+                </div>
+                <span class="skill-weight" *ngIf="s.weight">Weight: {{ s.weight }}%</span>
+              </div>
+              <span class="tag-mandatory" *ngIf="s.obligatory">Required</span>
+            </div>
+          </div>
+        </div>
+        <div class="section" *ngIf="selectedJobForDetails?.stages?.length">
+          <h3 class="section-title">Hiring Stages</h3>
+          <div class="stages-track">
+            <div class="stage-step" *ngFor="let s of selectedJobForDetails?.stages; let i = index">
+              <div class="stage-number">{{ i + 1 }}</div>
+              <div class="stage-info">
+                <div class="stage-label">{{ s.label }}</div>
+                <div class="stage-eval" *ngIf="s.evaluator">{{ s.evaluator }}</div>
+              </div>
+              <div class="stage-connector" *ngIf="i < (selectedJobForDetails?.stages?.length || 0) - 1"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" (click)="closeDetailsModal()">Close</button>
+        <button class="btn-primary" (click)="applyFromDetails()">Apply now</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== MODALE : DÉPÔT DU CV ========== -->
+  <div class="modal-backdrop" *ngIf="showApplyModal" (click)="closeApplyModal()">
+    <div class="modal-panel" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <div class="header-left">
+          <span class="modal-eyebrow">Application</span>
+          <h2 class="modal-title">Apply to "{{ selectedJobForApply?.title }}"</h2>
+        </div>
+        <button class="close-btn" (click)="closeApplyModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p><strong>Company:</strong> NexGen AI HR Solutions</p>
+        <p><strong>Location:</strong> {{ selectedJobForApply?.location || 'Not specified' }}</p>
+        <div class="upload-area">
+          <label for="cvFile">Upload your CV (PDF only)</label>
+          <input type="file" id="cvFile" accept="application/pdf" (change)="onFileSelected($event)" />
+          <div *ngIf="uploadMessage" class="upload-message" [class.error]="uploadMessage.includes('❌')">{{ uploadMessage }}</div>
+          <button class="btn-submit" [disabled]="isUploading" (click)="submitApplication()">
+            {{ isUploading ? 'Uploading...' : 'Submit my application' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

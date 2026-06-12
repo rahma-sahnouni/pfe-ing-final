@@ -1,0 +1,986 @@
+<!-- Page Header -->
+<div class="page-header">
+  <h1 class="page-title">Technical Test Management</h1>
+  <p class="page-description">
+    Create and assign coding assessments to evaluate candidates' technical skills for each job opening.
+  </p>
+</div>
+
+<!-- ══ MISSED DEADLINES BANNER ══════════════════════════════════════════ -->
+<div class="deadline-banner missed-banner"
+     *ngIf="showMissedBanner && missedDeadlineJobs.length">
+  <div class="banner-icon-wrap">
+    <span class="material-icons banner-icon">warning</span>
+  </div>
+  <div class="banner-body">
+    <div class="banner-title">
+      {{ missedDeadlineJobs.length }} missed deadline{{ missedDeadlineJobs.length !== 1 ? 's' : '' }}
+    </div>
+    <div class="banner-list">
+      <span class="banner-chip missed-chip"
+            *ngFor="let job of missedDeadlineJobs"
+            (click)="openModal(job)">
+        <span class="material-icons" style="font-size:13px">error_outline</span>
+        {{ job.title }}
+        <span class="chip-date">· {{ deadlineDate(job) }}</span>
+      </span>
+    </div>
+    <div class="banner-hint">
+      These jobs passed their test-creation deadline. Create a technical test now to unblock candidates.
+    </div>
+  </div>
+  <button class="banner-close" (click)="showMissedBanner = false">✕</button>
+</div>
+
+<!-- ══ UPCOMING DEADLINES BANNER ════════════════════════════════════════ -->
+<div class="deadline-banner upcoming-banner"
+     *ngIf="showUpcomingBanner && upcomingDeadlineJobs.length">
+  <div class="banner-icon-wrap">
+    <span class="material-icons banner-icon">schedule</span>
+  </div>
+  <div class="banner-body">
+    <div class="banner-title">
+      Upcoming test deadline{{ upcomingDeadlineJobs.length !== 1 ? 's' : '' }}
+    </div>
+    <div class="banner-list">
+      <span class="banner-chip"
+            *ngFor="let job of upcomingDeadlineJobs"
+            [class.critical-chip]="job._deadlineUrgency === 'critical'"
+            [class.soon-chip]="job._deadlineUrgency === 'soon'"
+            (click)="openModal(job)">
+        <span class="material-icons" style="font-size:13px">timelapse</span>
+        {{ job.title }}
+        <span class="chip-date">· {{ deadlineLabel(job) }}</span>
+      </span>
+    </div>
+    <div class="banner-hint">
+      Create the technical test before the deadline to keep your pipeline on track.
+    </div>
+  </div>
+  <button class="banner-close" (click)="showUpcomingBanner = false">✕</button>
+</div>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="search-box">
+    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    </svg>
+    <input type="text" placeholder="Search by title, department or location…"
+      [(ngModel)]="searchTerm" (input)="applyFilter()" />
+  </div>
+  <div class="filter-bar">
+    <button *ngFor="let s of statuses" class="filter-btn"
+      [class.active]="activeStatus === s" (click)="setFilter(s)">
+      {{ s === 'all' ? 'All' : (s | titlecase) }}
+    </button>
+  </div>
+</div>
+
+<!-- States -->
+<div *ngIf="loading" class="state-msg">
+  <span class="spinner"></span> Loading jobs…
+</div>
+<div *ngIf="error" class="state-msg error">{{ error }}</div>
+
+<!-- Job grid -->
+<div class="job-grid" *ngIf="!loading && !error">
+  <div *ngIf="filteredJobs.length === 0" class="empty-state">
+    <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.5">
+      <rect x="8" y="16" width="48" height="36" rx="4"/>
+      <path d="M22 16v-4a10 10 0 0 1 20 0v4"/>
+    </svg>
+    <p>No jobs found for this filter.</p>
+  </div>
+
+  <div class="job-card" *ngFor="let job of filteredJobs"
+       [class.card-missed]="job._deadlineUrgency === 'missed'"
+       [class.card-critical]="job._deadlineUrgency === 'critical'"
+       [class.card-soon]="job._deadlineUrgency === 'soon'">
+
+    <div class="job-top">
+      <div class="job-info">
+        <div class="job-title">{{ job.title }}</div>
+        <div class="job-meta">
+          <span class="meta-chip" *ngIf="job.department">{{ job.department }}</span>
+          <span class="meta-chip" *ngIf="job.location">{{ job.location }}</span>
+          <span class="meta-chip" *ngIf="job.contractType">{{ job.contractType }}</span>
+          <span class="meta-chip" *ngIf="job.experienceLevel">{{ job.experienceLevel }}</span>
+        </div>
+      </div>
+      <span class="badge" [ngClass]="'badge-' + job.status">{{ job.status }}</span>
+    </div>
+
+    <!-- Deadline badge -->
+    <div class="deadline-badge"
+         *ngIf="!hasTechTests(job) && job._deadline"
+         [ngClass]="'badge-' + job._deadlineUrgency">
+      <span class="material-icons deadline-badge-icon">
+        {{ job._deadlineUrgency === 'missed' ? 'warning' : 'schedule' }}
+      </span>
+      <span class="deadline-badge-text">{{ deadlineLabel(job) }}</span>
+      <span class="deadline-badge-date">· {{ deadlineDate(job) }}</span>
+    </div>
+
+    <!-- Actions row -->
+    <div class="job-actions-row">
+
+      <!-- View details -->
+      <button class="btn-link" (click)="openJobDetails(job)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        View details
+      </button>
+
+      <span class="sep">·</span>
+
+      <!-- View tests (modal) -->
+      <button class="btn-link" (click)="openTestsModal(job)" [disabled]="testCount(job) === 0">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="9 11 12 14 22 4"/>
+          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+        </svg>
+        View tests
+        <span class="test-badge" *ngIf="testCount(job) > 0">{{ testCount(job) }}</span>
+      </button>
+
+      <span class="sep">·</span>
+
+      <!-- Results -->
+      <button class="btn-link" (click)="goToResults(job)" [disabled]="testCount(job) === 0">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 20V10M12 20V4M6 20v-6"/>
+        </svg>
+        Results
+      </button>
+
+    </div>
+
+    <!-- Bottom row -->
+    <div class="job-bottom">
+      <div class="test-count">
+        Tests assigned: <strong>{{ testCount(job) }}</strong>
+      </div>
+      <button class="btn-add"
+              [class.btn-add-urgent]="!hasTechTests(job) && (job._deadlineUrgency === 'critical' || job._deadlineUrgency === 'missed')"
+              (click)="openModal(job)">
+        <span class="plus">+</span> Add test
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     MODAL — Add technical test
+     ══════════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" *ngIf="showModal" (click)="onOverlayClick($event)">
+  <div class="modal-panel" [class.wide]="modalStep === 'form'">
+
+    <div class="modal-hdr">
+      <div class="modal-hdr-left">
+        <button class="btn-back" *ngIf="modalStep === 'form'" (click)="backToTypeSelect()" title="Back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
+        <div>
+          <div class="modal-title">Add Technical Test</div>
+          <div class="modal-sub">{{ selectedJob?.title }}</div>
+        </div>
+      </div>
+      <button class="btn-close" (click)="closeModal()">×</button>
+    </div>
+
+    <!-- Step 1 : Type selector -->
+    <div class="type-select-area" *ngIf="modalStep === 'type-select'">
+      <p class="type-select-hint">Choose the type of assessment you want to create:</p>
+      <div class="type-cards">
+
+        <div class="type-card" (click)="selectTestType('problem_solving')">
+          <div class="type-card-icon ps-icon">
+            <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="3" y="5" width="26" height="22" rx="3"/>
+              <path d="M10 12l4 4-4 4M17 20h5"/>
+            </svg>
+          </div>
+          <div class="type-card-body">
+            <div class="type-card-title">Problem Solving</div>
+            <div class="type-card-desc">Algorithmic coding challenge with input/output examples, constraints and complexity — like LeetCode or Codeforces.</div>
+          </div>
+          <svg class="type-card-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+
+        <div class="type-card" (click)="selectTestType('qcm')">
+          <div class="type-card-icon qcm-icon">
+            <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="3" y="5" width="26" height="22" rx="3"/>
+              <circle cx="10" cy="12" r="2"/><line x1="15" y1="12" x2="25" y2="12"/>
+              <circle cx="10" cy="20" r="2"/><line x1="15" y1="20" x2="25" y2="20"/>
+            </svg>
+          </div>
+          <div class="type-card-body">
+            <div class="type-card-title">QCM / Quiz</div>
+            <div class="type-card-desc">Multiple choice, single choice or open-ended questions to assess theoretical knowledge.</div>
+          </div>
+          <svg class="type-card-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+
+        <div class="type-card type-card-mixed" (click)="selectTestType('mixed')">
+          <div class="type-card-icon mixed-icon">
+            <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="3" y="5" width="26" height="22" rx="3"/>
+              <path d="M7 12l3 3-3 3M13 18h5"/>
+              <circle cx="22" cy="12" r="2"/>
+            </svg>
+          </div>
+          <div class="type-card-body">
+            <div class="type-card-title">Mixed <span class="badge-new">PS + QCM</span></div>
+            <div class="type-card-desc">Combine a coding problem with a quiz — the complete technical assessment experience.</div>
+          </div>
+          <svg class="type-card-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Step 2 : Form -->
+    <div class="form-area" *ngIf="modalStep === 'form'">
+
+      <div class="active-type-badge" [ngClass]="'type-' + testForm.testType">
+        <span>{{ testTypeIcon(testForm.testType!) }}</span>
+        {{ testTypeLabel(testForm.testType!) }}
+      </div>
+
+      <div class="form-cols">
+
+        <!-- LEFT column -->
+        <div class="form-col">
+          <div class="form-section-title">General Info</div>
+
+          <div class="form-group">
+            <label class="form-label">Test Title <span class="req">*</span></label>
+            <input type="text" [(ngModel)]="testForm.title"
+              placeholder="e.g. Graph Traversal Challenge" />
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label class="form-label">Difficulty</label>
+              <div class="difficulty-pills">
+                <label *ngFor="let d of ['easy','medium','hard']" class="diff-pill"
+                  [class.active]="testForm.difficulty === d">
+                  <input type="radio" name="difficulty" [value]="d" [(ngModel)]="testForm.difficulty" />
+                  {{ d | titlecase }}
+                </label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Time limit (min)</label>
+              <input type="number" [(ngModel)]="testForm.timeLimitMinutes" min="5" max="360" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Description <span class="hint">markdown supported</span></label>
+            <textarea [(ngModel)]="testForm.description" rows="3"
+              placeholder="Briefly describe the assessment…"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Tags <span class="hint">comma-separated</span></label>
+            <input type="text" [(ngModel)]="testForm.tags"
+              placeholder="arrays, graphs, OOP, SQL…" />
+          </div>
+
+          <div class="form-group checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" [(ngModel)]="testForm.isPublic" />
+              <span class="checkbox-box"></span>
+              Make this test reusable for other jobs
+            </label>
+          </div>
+        </div>
+
+        <!-- RIGHT column -->
+        <div class="form-col">
+
+          <ng-container *ngIf="hasPS">
+            <div class="form-section-title ps-label">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8">
+                <rect x="1" y="2" width="14" height="12" rx="2"/>
+                <path d="M4 6l3 2-3 2M9 10h3"/>
+              </svg>
+              Problem Solving
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Expected Complexity</label>
+              <input type="text" [(ngModel)]="testForm.ps.expectedComplexity"
+                placeholder="e.g. O(n log n)" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">
+                Input / Output Examples
+                <span class="hint">— each parameter is named &amp; typed</span>
+              </label>
+
+              <div class="structured-examples">
+                <div class="structured-example"
+                     *ngFor="let ex of testForm.ps.examples; let ei = index">
+
+                  <div class="ex-header">
+                    <span class="ex-num">Example {{ ei + 1 }}</span>
+                    <button class="btn-remove-row"
+                      (click)="removeExample(ei)"
+                      [disabled]="testForm.ps.examples.length === 1"
+                      title="Remove example">
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="4 6 4 13 12 13 12 6"/>
+                        <line x1="2" y1="4" x2="14" y2="4"/>
+                        <line x1="6" y1="2" x2="10" y2="2"/>
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div class="param-section-label">Input parameters</div>
+
+                  <div class="param-grid-header">
+                    <span>Name</span><span>Type</span><span>Value (JSON)</span><span></span>
+                  </div>
+
+                  <div class="param-row" *ngFor="let p of ex.params; let pi = index">
+                    <input type="text" class="param-name" [(ngModel)]="p.name"
+                      placeholder="input" spellcheck="false" />
+                    <select class="param-type" [(ngModel)]="p.type">
+                      <option *ngFor="let t of paramTypes" [value]="t">{{ t }}</option>
+                    </select>
+                    <ng-container *ngIf="isMultiline(p.type); else inlineInput">
+                      <textarea class="param-value param-textarea"
+                        [(ngModel)]="p.value" spellcheck="false" rows="4">
+                      </textarea>
+                    </ng-container>
+                    <ng-template #inlineInput>
+                      <input type="text" class="param-value" [(ngModel)]="p.value"
+                        spellcheck="false"
+                        [class.param-value--error]="p.value && !isValidJson(p.value, p.type)" />
+                    </ng-template>
+                    <button class="btn-remove-row" (click)="removeParam(ei, pi)"
+                      [disabled]="ex.params.length === 1" title="Remove parameter">
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="3" y1="8" x2="13" y2="8"/>
+                      </svg>
+                    </button>
+                  </div>
+
+                  <button class="btn-add-row" (click)="addParam(ei)">+ Add parameter</button>
+
+                  <div class="output-row">
+                    <label class="form-label">Expected output <span class="hint">(JSON)</span></label>
+                    <input type="text" class="param-value" [(ngModel)]="ex.output"
+                      placeholder='[0, 1]  or  6  or  "hello"  or  true'
+                      spellcheck="false"
+                      [class.param-value--error]="ex.output && !isValidJson(ex.output)" />
+                  </div>
+
+                  <div class="output-row">
+                    <label class="form-label">Explanation <span class="hint">(optional)</span></label>
+                    <input type="text" [(ngModel)]="ex.explanation"
+                      placeholder="Because nums[0] + nums[1] = 2 + 7 = 9" />
+                  </div>
+
+                  <details class="preview-details">
+                    <summary class="preview-toggle">🔍 Preview stored JSON</summary>
+                    <pre class="preview-json">{{ previewExample(ex) }}</pre>
+                  </details>
+
+                </div>
+              </div>
+
+              <button class="btn-add-row" (click)="addExample()">+ Add example</button>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Constraints</label>
+              <div class="constraints-list">
+                <div class="constraint-row"
+                     *ngFor="let c of testForm.ps.constraints; let i = index">
+                  <input type="text" [(ngModel)]="c.label" placeholder="1 ≤ n ≤ 10⁵" />
+                  <button class="btn-remove-row" (click)="removeConstraint(i)"
+                    [disabled]="testForm.ps.constraints.length === 1" title="Remove">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="3" y1="8" x2="13" y2="8"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <button class="btn-add-row" (click)="addConstraint()">+ Add constraint</button>
+            </div>
+          </ng-container>
+
+          <ng-container *ngIf="hasQCM">
+            <div class="form-section-title qcm-label" [style.marginTop]="hasPS ? '24px' : '0'">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8">
+                <rect x="1" y="2" width="14" height="12" rx="2"/>
+                <circle cx="5" cy="6" r="1.2"/><line x1="8" y1="6" x2="13" y2="6"/>
+                <circle cx="5" cy="10" r="1.2"/><line x1="8" y1="10" x2="13" y2="10"/>
+              </svg>
+              QCM Questions
+            </div>
+
+            <div class="qcm-questions">
+              <div class="qcm-question-block"
+                   *ngFor="let q of testForm.qcm.questions; let qi = index">
+
+                <div class="q-header">
+                  <span class="q-num">Q{{ qi + 1 }}</span>
+                  <div class="q-type-select">
+                    <select [(ngModel)]="q.type" (change)="onQuestionTypeChange(qi)">
+                      <option value="single_choice">Single choice</option>
+                      <option value="multiple_choice">Multiple choice</option>
+                      <option value="open">Open question</option>
+                    </select>
+                  </div>
+                  <div class="q-points">
+                    <input type="number" [(ngModel)]="q.points" min="0" max="100" style="width:52px"/>
+                    <span>pts</span>
+                  </div>
+                  <button class="btn-remove-q" (click)="removeQcmQuestion(qi)"
+                    [disabled]="testForm.qcm.questions.length === 1" title="Remove question">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="4 6 4 13 12 13 12 6"/>
+                      <line x1="2" y1="4" x2="14" y2="4"/>
+                      <line x1="6" y1="2" x2="10" y2="2"/>
+                    </svg>
+                  </button>
+                </div>
+
+                <input class="q-text-input" type="text" [(ngModel)]="q.questionText"
+                  placeholder="Enter your question here…" />
+
+                <div class="options-list" *ngIf="q.type !== 'open'">
+                  <div class="option-row" *ngFor="let opt of q.options; let oi = index">
+                    <label class="opt-check" [class.radio]="q.type === 'single_choice'">
+                      <input *ngIf="q.type === 'multiple_choice'"
+                        type="checkbox" [(ngModel)]="opt.isCorrect" />
+                      <input *ngIf="q.type === 'single_choice'"
+                        type="radio" [name]="'q-' + qi"
+                        [checked]="opt.isCorrect"
+                        (change)="setSingleCorrect(qi, oi)" />
+                      <span class="opt-mark"></span>
+                    </label>
+                    <input type="text" [(ngModel)]="opt.text" placeholder="Option {{ oi + 1 }}" />
+                    <button class="btn-remove-row" (click)="removeOption(qi, oi)"
+                      [disabled]="q.options.length <= 2" title="Remove option">
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="3" y1="8" x2="13" y2="8"/>
+                      </svg>
+                    </button>
+                  </div>
+                  <button class="btn-add-row" (click)="addOption(qi)">+ Add option</button>
+                </div>
+
+                <div class="form-group" *ngIf="q.type === 'open'" style="margin-top:8px">
+                  <label class="form-label">Model answer <span class="hint">(optional)</span></label>
+                  <textarea [(ngModel)]="q.correctAnswer" rows="2"
+                    placeholder="Enter the expected answer for reference…"></textarea>
+                </div>
+
+              </div>
+            </div>
+
+            <button class="btn-add-question" (click)="addQcmQuestion()">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/>
+              </svg>
+              Add question
+            </button>
+          </ng-container>
+
+        </div>
+      </div>
+
+      <div class="form-error-banner" *ngIf="formError">⚠ {{ formError }}</div>
+
+      <div class="modal-footer">
+        <button class="btn-cancel" (click)="closeModal()">Cancel</button>
+        <button class="btn-submit" (click)="submitTest()"
+          [disabled]="submitting || !testForm.title.trim()">
+          <span *ngIf="submitting" class="spinner sm"></span>
+          {{ submitting ? 'Saving…' : 'Assign test' }}
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     MODAL — Job details
+     ══════════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" *ngIf="showJobDetailsModal" (click)="onJobDetailsOverlayClick($event)">
+  <div class="modal-panel modal-details-panel" *ngIf="jobDetailsJob">
+    <div class="modal-hdr">
+      <div class="modal-hdr-left">
+        <div>
+          <div class="modal-title">{{ jobDetailsJob.title }}</div>
+          <span class="badge" [ngClass]="'badge-' + jobDetailsJob.status">{{ jobDetailsJob.status }}</span>
+        </div>
+      </div>
+      <button class="btn-close" (click)="closeJobDetails()">×</button>
+    </div>
+
+    <div class="details-chips">
+      <span class="meta-chip" *ngIf="jobDetailsJob.department">{{ jobDetailsJob.department }}</span>
+      <span class="meta-chip" *ngIf="jobDetailsJob.location">{{ jobDetailsJob.location }}</span>
+      <span class="meta-chip" *ngIf="jobDetailsJob.contractType">{{ jobDetailsJob.contractType }}</span>
+      <span class="meta-chip" *ngIf="jobDetailsJob.experienceLevel">{{ jobDetailsJob.experienceLevel }}</span>
+      <span class="meta-chip" *ngIf="jobDetailsJob.deadline">
+        Deadline: {{ jobDetailsJob.deadline | date:'mediumDate' }}
+      </span>
+    </div>
+
+    <hr class="modal-divider"/>
+
+    <div class="details-section" *ngIf="jobDetailsJob.description">
+      <div class="details-section-title">Description</div>
+      <p class="details-text">{{ jobDetailsJob.description }}</p>
+    </div>
+
+    <div class="details-section" *ngIf="jobDetailsJob.skills?.length">
+      <div class="details-section-title">Required Skills</div>
+      <div class="tag-list">
+        <span class="tag" *ngFor="let skill of jobDetailsJob.skills">{{ skill.name }}</span>
+      </div>
+    </div>
+
+    <div *ngIf="!jobDetailsJob.description && !jobDetailsJob.skills?.length" class="details-empty">
+      No additional details available.
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-cancel" (click)="closeJobDetails()">Close</button>
+      <button class="btn-submit" (click)="closeJobDetails(); openModal(jobDetailsJob!)">+ Add test</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     MODAL — View tests
+     ══════════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" *ngIf="showTestsModal" (click)="onTestsOverlayClick($event)">
+  <div class="modal-panel modal-tests-panel" *ngIf="testsModalJob">
+    <div class="modal-hdr">
+      <div class="modal-hdr-left">
+        <div>
+          <div class="modal-title">Assigned Tests</div>
+          <div class="modal-sub">{{ testsModalJob.title }}</div>
+        </div>
+      </div>
+      <button class="btn-close" (click)="closeTestsModal()">×</button>
+    </div>
+
+    <div *ngIf="testsLoading" class="state-msg"><span class="spinner"></span> Loading…</div>
+    <div *ngIf="testsError" class="state-msg error">{{ testsError }}</div>
+
+    <div class="tests-list" *ngIf="!testsLoading && !testsError">
+      <div *ngIf="jobTests.length === 0" class="details-empty">No tests assigned yet.</div>
+
+      <div class="test-item" *ngFor="let test of jobTests; let i = index">
+        <div class="test-item-top">
+          <div class="test-item-left">
+            <span class="test-index">#{{ i + 1 }}</span>
+            <span class="test-item-title">{{ test.title }}</span>
+            <span class="type-pill type-{{ test.testType }}">{{ testTypeLabel(test.testType) }}</span>
+          </div>
+          <span class="difficulty-badge" [ngClass]="difficultyClass(test.difficulty)">
+            {{ test.difficulty | titlecase }}
+          </span>
+        </div>
+
+        <div class="test-item-meta">
+          <span *ngIf="test.timeLimitMinutes">⏱ {{ test.timeLimitMinutes }} min</span>
+          <span *ngIf="test.problemSolving?.expectedComplexity">
+            Ω {{ test.problemSolving.expectedComplexity }}
+          </span>
+          <span *ngIf="test.qcm?.questions?.length">
+            ☑ {{ test.qcm.questions.length }} question(s)
+          </span>
+          <span *ngIf="test.isPublic" class="chip-public">reusable</span>
+        </div>
+
+        <p class="test-item-desc" *ngIf="test.description">{{ test.description }}</p>
+
+        <div class="tag-list" *ngIf="test.tags?.length">
+          <span class="tag" *ngFor="let tag of test.tags">{{ tag }}</span>
+        </div>
+
+        <!-- ── Actions ── -->
+        <div class="test-item-actions">
+
+          <!-- View details -->
+          <button class="btn-link" (click)="goToTestDetails(test._id); closeTestsModal()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 style="width:13px;height:13px">
+              <path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
+              <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7
+                       -1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+            </svg>
+            View details
+          </button>
+
+          <span class="sep">·</span>
+
+          <!-- Edit -->
+          <button class="btn-link btn-edit-link" (click)="openEditModal(test, testsModalJob!)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 style="width:13px;height:13px">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+            Edit
+          </button>
+
+          <span class="sep">·</span>
+
+          <!-- Delete with inline confirmation -->
+          <ng-container *ngIf="deleteConfirming !== test._id; else deleteConfirmTpl">
+            <button class="btn-link btn-danger-link" (click)="confirmDelete(test._id)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                   style="width:13px;height:13px">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                <path d="M10 11v6M14 11v6"/>
+                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+              </svg>
+              Delete
+            </button>
+          </ng-container>
+
+          <ng-template #deleteConfirmTpl>
+            <span class="delete-confirm-inline">
+              <span class="delete-confirm-label">Are you sure?</span>
+              <button class="btn-confirm-delete"
+                      [disabled]="deleting"
+                      (click)="deleteTest(test._id, testsModalJob!._id!)">
+                <span *ngIf="deleting" class="spinner sm"></span>
+                {{ deleting ? '…' : 'Yes, delete' }}
+              </button>
+              <button class="btn-cancel-delete" (click)="cancelDelete()">Cancel</button>
+            </span>
+          </ng-template>
+
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn-cancel" (click)="closeTestsModal()">Close</button>
+      <button class="btn-submit" (click)="closeTestsModal(); openModal(testsModalJob!)">
+        + Add another test
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     MODAL — Edit technical test  (full form, identical to Create)
+     ══════════════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" *ngIf="showEditModal"
+     (click)="$event.target === $event.currentTarget && closeEditModal()">
+  <div class="modal-panel wide" *ngIf="editingTest">
+
+    <div class="modal-hdr">
+      <div class="modal-hdr-left">
+        <div>
+          <div class="modal-title">Edit Technical Test</div>
+          <div class="modal-sub">{{ editingJob?.title }}</div>
+        </div>
+      </div>
+      <button class="btn-close" (click)="closeEditModal()">×</button>
+    </div>
+
+    <div class="form-area">
+
+      <!-- Active type badge (readonly) -->
+      <div class="active-type-badge" [ngClass]="'type-' + editForm.testType">
+        <span>{{ testTypeIcon(editForm.testType!) }}</span>
+        {{ testTypeLabel(editForm.testType!) }}
+      </div>
+
+      <div class="form-cols">
+
+        <!-- LEFT column -->
+        <div class="form-col">
+          <div class="form-section-title">General Info</div>
+
+          <div class="form-group">
+            <label class="form-label">Test Title <span class="req">*</span></label>
+            <input type="text" [(ngModel)]="editForm.title"
+              placeholder="e.g. Graph Traversal Challenge" />
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label class="form-label">Difficulty</label>
+              <div class="difficulty-pills">
+                <label *ngFor="let d of ['easy','medium','hard']" class="diff-pill"
+                  [class.active]="editForm.difficulty === d">
+                  <input type="radio" name="edit-difficulty" [value]="d"
+                         [(ngModel)]="editForm.difficulty" />
+                  {{ d | titlecase }}
+                </label>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Time limit (min)</label>
+              <input type="number" [(ngModel)]="editForm.timeLimitMinutes" min="5" max="360" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Description <span class="hint">markdown supported</span></label>
+            <textarea [(ngModel)]="editForm.description" rows="3"
+              placeholder="Briefly describe the assessment…"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Tags <span class="hint">comma-separated</span></label>
+            <input type="text" [(ngModel)]="editForm.tags"
+              placeholder="arrays, graphs, OOP, SQL…" />
+          </div>
+
+          <div class="form-group checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" [(ngModel)]="editForm.isPublic" />
+              <span class="checkbox-box"></span>
+              Make this test reusable for other jobs
+            </label>
+          </div>
+        </div>
+
+        <!-- RIGHT column -->
+        <div class="form-col">
+
+          <!-- ── Problem Solving section ── -->
+          <ng-container *ngIf="editHasPS">
+            <div class="form-section-title ps-label">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8">
+                <rect x="1" y="2" width="14" height="12" rx="2"/>
+                <path d="M4 6l3 2-3 2M9 10h3"/>
+              </svg>
+              Problem Solving
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Expected Complexity</label>
+              <input type="text" [(ngModel)]="editForm.ps.expectedComplexity"
+                placeholder="e.g. O(n log n)" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">
+                Input / Output Examples
+                <span class="hint">— each parameter is named &amp; typed</span>
+              </label>
+
+              <div class="structured-examples">
+                <div class="structured-example"
+                     *ngFor="let ex of editForm.ps.examples; let ei = index">
+
+                  <div class="ex-header">
+                    <span class="ex-num">Example {{ ei + 1 }}</span>
+                    <button class="btn-remove-row"
+                      (click)="removeEditExample(ei)"
+                      [disabled]="editForm.ps.examples.length === 1"
+                      title="Remove example">
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="4 6 4 13 12 13 12 6"/>
+                        <line x1="2" y1="4" x2="14" y2="4"/>
+                        <line x1="6" y1="2" x2="10" y2="2"/>
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div class="param-section-label">Input parameters</div>
+
+                  <div class="param-grid-header">
+                    <span>Name</span><span>Type</span><span>Value (JSON)</span><span></span>
+                  </div>
+
+                  <div class="param-row" *ngFor="let p of ex.params; let pi = index">
+                    <input type="text" class="param-name" [(ngModel)]="p.name"
+                      placeholder="input" spellcheck="false" />
+                    <select class="param-type" [(ngModel)]="p.type">
+                      <option *ngFor="let t of paramTypes" [value]="t">{{ t }}</option>
+                    </select>
+                    <ng-container *ngIf="isMultiline(p.type); else editInlineInput">
+                      <textarea class="param-value param-textarea"
+                        [(ngModel)]="p.value" spellcheck="false" rows="4">
+                      </textarea>
+                    </ng-container>
+                    <ng-template #editInlineInput>
+                      <input type="text" class="param-value" [(ngModel)]="p.value"
+                        spellcheck="false"
+                        [class.param-value--error]="p.value && !isValidJson(p.value, p.type)" />
+                    </ng-template>
+                    <button class="btn-remove-row" (click)="removeEditParam(ei, pi)"
+                      [disabled]="ex.params.length === 1" title="Remove parameter">
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="3" y1="8" x2="13" y2="8"/>
+                      </svg>
+                    </button>
+                  </div>
+
+                  <button class="btn-add-row" (click)="addEditParam(ei)">+ Add parameter</button>
+
+                  <div class="output-row">
+                    <label class="form-label">Expected output <span class="hint">(JSON)</span></label>
+                    <input type="text" class="param-value" [(ngModel)]="ex.output"
+                      placeholder='[0, 1]  or  6  or  "hello"  or  true'
+                      spellcheck="false"
+                      [class.param-value--error]="ex.output && !isValidJson(ex.output)" />
+                  </div>
+
+                  <div class="output-row">
+                    <label class="form-label">Explanation <span class="hint">(optional)</span></label>
+                    <input type="text" [(ngModel)]="ex.explanation"
+                      placeholder="Because nums[0] + nums[1] = 2 + 7 = 9" />
+                  </div>
+
+                  <details class="preview-details">
+                    <summary class="preview-toggle">🔍 Preview stored JSON</summary>
+                    <pre class="preview-json">{{ previewExample(ex) }}</pre>
+                  </details>
+
+                </div>
+              </div>
+
+              <button class="btn-add-row" (click)="addEditExample()">+ Add example</button>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Constraints</label>
+              <div class="constraints-list">
+                <div class="constraint-row"
+                     *ngFor="let c of editForm.ps.constraints; let i = index">
+                  <input type="text" [(ngModel)]="c.label" placeholder="1 ≤ n ≤ 10⁵" />
+                  <button class="btn-remove-row" (click)="removeEditConstraint(i)"
+                    [disabled]="editForm.ps.constraints.length === 1" title="Remove">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="3" y1="8" x2="13" y2="8"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <button class="btn-add-row" (click)="addEditConstraint()">+ Add constraint</button>
+            </div>
+          </ng-container>
+
+          <!-- ── QCM section ── -->
+          <ng-container *ngIf="editHasQCM">
+            <div class="form-section-title qcm-label" [style.marginTop]="editHasPS ? '24px' : '0'">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8">
+                <rect x="1" y="2" width="14" height="12" rx="2"/>
+                <circle cx="5" cy="6" r="1.2"/><line x1="8" y1="6" x2="13" y2="6"/>
+                <circle cx="5" cy="10" r="1.2"/><line x1="8" y1="10" x2="13" y2="10"/>
+              </svg>
+              QCM Questions
+            </div>
+
+            <div class="qcm-questions">
+              <div class="qcm-question-block"
+                   *ngFor="let q of editForm.qcm.questions; let qi = index">
+
+                <div class="q-header">
+                  <span class="q-num">Q{{ qi + 1 }}</span>
+                  <div class="q-type-select">
+                    <select [(ngModel)]="q.type" (change)="onEditQuestionTypeChange(qi)">
+                      <option value="single_choice">Single choice</option>
+                      <option value="multiple_choice">Multiple choice</option>
+                      <option value="open">Open question</option>
+                    </select>
+                  </div>
+                  <div class="q-points">
+                    <input type="number" [(ngModel)]="q.points" min="0" max="100" style="width:52px"/>
+                    <span>pts</span>
+                  </div>
+                  <button class="btn-remove-q" (click)="removeEditQcmQuestion(qi)"
+                    [disabled]="editForm.qcm.questions.length === 1" title="Remove question">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="4 6 4 13 12 13 12 6"/>
+                      <line x1="2" y1="4" x2="14" y2="4"/>
+                      <line x1="6" y1="2" x2="10" y2="2"/>
+                    </svg>
+                  </button>
+                </div>
+
+                <input class="q-text-input" type="text" [(ngModel)]="q.questionText"
+                  placeholder="Enter your question here…" />
+
+                <div class="options-list" *ngIf="q.type !== 'open'">
+                  <div class="option-row" *ngFor="let opt of q.options; let oi = index">
+                    <label class="opt-check" [class.radio]="q.type === 'single_choice'">
+                      <input *ngIf="q.type === 'multiple_choice'"
+                        type="checkbox" [(ngModel)]="opt.isCorrect" />
+                      <input *ngIf="q.type === 'single_choice'"
+                        type="radio" [name]="'edit-q-' + qi"
+                        [checked]="opt.isCorrect"
+                        (change)="setEditSingleCorrect(qi, oi)" />
+                      <span class="opt-mark"></span>
+                    </label>
+                    <input type="text" [(ngModel)]="opt.text" placeholder="Option {{ oi + 1 }}" />
+                    <button class="btn-remove-row" (click)="removeEditOption(qi, oi)"
+                      [disabled]="q.options.length <= 2" title="Remove option">
+                      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="3" y1="8" x2="13" y2="8"/>
+                      </svg>
+                    </button>
+                  </div>
+                  <button class="btn-add-row" (click)="addEditOption(qi)">+ Add option</button>
+                </div>
+
+                <div class="form-group" *ngIf="q.type === 'open'" style="margin-top:8px">
+                  <label class="form-label">Model answer <span class="hint">(optional)</span></label>
+                  <textarea [(ngModel)]="q.correctAnswer" rows="2"
+                    placeholder="Enter the expected answer for reference…"></textarea>
+                </div>
+
+              </div>
+            </div>
+
+            <button class="btn-add-question" (click)="addEditQcmQuestion()">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/>
+              </svg>
+              Add question
+            </button>
+          </ng-container>
+
+        </div>
+      </div>
+
+      <div class="form-error-banner" *ngIf="editFormError">⚠ {{ editFormError }}</div>
+
+      <div class="modal-footer">
+        <button class="btn-cancel" (click)="closeEditModal()">Cancel</button>
+        <button class="btn-submit" (click)="submitEditTest()"
+                [disabled]="editSubmitting || !editForm.title.trim()">
+          <span *ngIf="editSubmitting" class="spinner sm"></span>
+          {{ editSubmitting ? 'Saving…' : 'Save changes' }}
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>

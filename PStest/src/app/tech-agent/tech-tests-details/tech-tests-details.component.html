@@ -1,0 +1,748 @@
+<div class="detail-root" *ngIf="!loading && !error">
+
+  <!-- ══════════════════════════════════
+       LEFT PANEL
+  ══════════════════════════════════ -->
+  <aside class="left-panel">
+
+    <button class="back-btn" (click)="goBack()">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <path d="M9 2L4 7L9 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Back
+    </button>
+
+    <!-- Test Header -->
+    <div class="test-header" *ngIf="test">
+      <div class="type-badge">
+        <span class="type-icon">{{ getTypeIcon(test.testType) }}</span>
+        {{ getTypeLabel(test.testType) }}
+      </div>
+      <h1 class="test-title">{{ test.title }}</h1>
+      <p class="test-desc" *ngIf="test.description">{{ test.description }}</p>
+      <div class="meta-pills">
+        <span class="meta-pill diff-pill"
+          [style.color]="getDiffColor(test.difficulty)"
+          [style.background]="getDiffBg(test.difficulty)"
+          [style.border-color]="getDiffColor(test.difficulty) + '44'">
+          {{ test.difficulty | titlecase }}
+        </span>
+        <span class="meta-pill">⏱ {{ test.timeLimitMinutes }} min</span>
+        <span class="meta-pill" *ngFor="let tag of test.tags">{{ tag }}</span>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid" *ngIf="test">
+      <div class="stat-box">
+        <span class="stat-num">{{ submissions.length }}</span>
+        <span class="stat-lbl">Submissions</span>
+      </div>
+      <div class="stat-box" *ngIf="test.qcm?.questions?.length">
+        <span class="stat-num">{{ test.qcm!.questions.length }}</span>
+        <span class="stat-lbl">Questions</span>
+      </div>
+      <div class="stat-box" *ngIf="test.problemSolving?.examples?.length">
+        <span class="stat-num">{{ test.problemSolving!.examples.length }}</span>
+        <span class="stat-lbl">Examples</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-num stat-pending">{{ pendingCount }}</span>
+        <span class="stat-lbl">Pending</span>
+      </div>
+    </div>
+
+    <!-- QCM Questions -->
+    <div class="side-section" *ngIf="test?.qcm?.questions?.length">
+      <div class="side-section-title">
+        <span class="dot dot-blue"></span> QCM Questions
+      </div>
+      <div class="q-list">
+        <div class="q-item" *ngFor="let q of test!.qcm!.questions; let i = index">
+          <div class="q-index">Q{{ i + 1 }}</div>
+          <div class="q-body">
+            <div class="q-text">{{ q.questionText }}</div>
+            <div class="q-meta">
+              <span class="q-type-badge">{{ q.type.replace('_', ' ') }}</span>
+              <span class="q-pts">{{ q.points }} pt{{ q.points !== 1 ? 's' : '' }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Problem Examples -->
+    <div class="side-section" *ngIf="test?.problemSolving?.examples?.length">
+      <div class="side-section-title">
+        <span class="dot dot-purple"></span> Problem Examples
+      </div>
+      <div class="example-item" *ngFor="let ex of test!.problemSolving!.examples; let i = index">
+        <div class="ex-label">Example {{ i + 1 }}</div>
+        <div class="ex-row">
+          <div class="ex-half">
+            <span class="ex-key">Input</span>
+            <code class="ex-code">{{ ex.input }}</code>
+          </div>
+          <span class="ex-arrow">→</span>
+          <div class="ex-half">
+            <span class="ex-key">Output</span>
+            <code class="ex-code">{{ ex.output }}</code>
+          </div>
+        </div>
+        <p class="ex-explanation" *ngIf="ex.explanation">{{ ex.explanation }}</p>
+      </div>
+    </div>
+
+    <!-- Constraints -->
+    <div class="side-section" *ngIf="test?.problemSolving?.constraints?.length">
+      <div class="side-section-title">
+        <span class="dot dot-amber"></span> Constraints
+      </div>
+      <ul class="constraints-list">
+        <li *ngFor="let c of test!.problemSolving!.constraints">{{ c.label }}</li>
+      </ul>
+      <div class="complexity-chip" *ngIf="test?.problemSolving?.expectedComplexity">
+        Expected: <strong>{{ test!.problemSolving!.expectedComplexity }}</strong>
+      </div>
+    </div>
+
+    <!-- Candidates -->
+    <div class="side-section">
+      <div class="side-section-title">
+        <span class="dot dot-green"></span> Candidates ({{ submissions.length }})
+      </div>
+      <div class="candidates-list">
+        <div class="cand-row"
+          *ngFor="let sub of submissions"
+          [class.active]="selectedSubmission?._id === sub._id"
+          (click)="selectSubmission(sub)">
+
+          <div class="cand-avatar" [style.background]="sub.candidate?.avatarColor || '#4f6ef7'">
+            {{ getInitials(sub.candidate.name) }}
+          </div>
+
+          <div class="cand-info">
+            <span class="cand-name">{{ sub.candidate?.name }}</span>
+            <div class="cand-status-row">
+              <span class="cand-status" [ngClass]="sub.status">
+                <span *ngIf="sub.status === 'pending_review'">⏳ Pending</span>
+                <span *ngIf="sub.status === 'evaluated'">✓ Evaluated</span>
+                <span *ngIf="sub.status === 'submitted'">◎ Submitted</span>
+              </span>
+              <!-- Anti-cheat mini badge in candidate list -->
+              <span class="cand-risk-dot"
+                    [class.risk-high]="getAntiCheatRisk(sub) === 'high'"
+                    [class.risk-medium]="getAntiCheatRisk(sub) === 'medium'"
+                    *ngIf="getAntiCheatRisk(sub) !== 'none'"
+                    [title]="'Risk ' + getRiskLabel(getAntiCheatRisk(sub))">
+                🛡
+              </span>
+            </div>
+          </div>
+
+          <div class="cand-score" [style.color]="getScoreColor(sub.score)" *ngIf="sub.score !== null">
+            {{ sub.score }}%
+          </div>
+          <div class="cand-score no-score" *ngIf="sub.score === null">—</div>
+        </div>
+
+        <div class="no-subs" *ngIf="submissions.length === 0">No submissions yet</div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- ══════════════════════════════════
+       RIGHT PANEL
+  ══════════════════════════════════ -->
+  <main class="right-panel">
+
+    <!-- Empty state -->
+    <div class="empty-state" *ngIf="!selectedSubmission">
+      <div class="empty-icon">👤</div>
+      <p>Select a candidate to review their answers</p>
+    </div>
+
+    <!-- Candidate content -->
+    <div class="answers-wrap" *ngIf="selectedSubmission">
+
+      <!-- ── Candidate Header (always visible) ── -->
+      <div class="cand-header">
+        <div class="cand-header-left">
+          <div class="cand-header-avatar"
+               [style.background]="selectedSubmission.candidate?.avatarColor || '#4f6ef7'">
+            {{ getInitials(selectedSubmission.candidate!.name) }}
+          </div>
+          <div>
+            <h2 class="cand-header-name">{{ selectedSubmission.candidate?.name }}</h2>
+            <p class="cand-header-email">{{ selectedSubmission.candidate?.email }}</p>
+            <p class="cand-header-date">
+              Submitted {{ formatDate(selectedSubmission.submittedAt) }}
+              · {{ formatTime(selectedSubmission.submittedAt) }}
+              <span class="cand-duration" *ngIf="selectedSubmission.timeSpentSeconds">
+                · ⏱ {{ getTimeSpent(selectedSubmission) }}
+              </span>
+            </p>
+          </div>
+        </div>
+
+        <div class="cand-header-right">
+          <!-- Score ring -->
+          <div class="score-ring-wrap" *ngIf="selectedSubmission.score !== null">
+            <svg class="score-ring" viewBox="0 0 80 80">
+              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ring-track)" stroke-width="7"/>
+              <circle cx="40" cy="40" r="32" fill="none"
+                [attr.stroke]="getScoreColor(selectedSubmission.score)"
+                stroke-width="7" stroke-linecap="round"
+                stroke-dasharray="201.06"
+                [attr.stroke-dashoffset]="201.06 - (201.06 * selectedSubmission.score! / 100)"
+                transform="rotate(-90 40 40)" class="ring-progress"/>
+            </svg>
+            <div class="ring-inner">
+              <span class="ring-val" [style.color]="getScoreColor(selectedSubmission.score)">
+                {{ selectedSubmission.score }}
+              </span>
+              <span class="ring-pct">%</span>
+            </div>
+          </div>
+
+          <div class="score-meta-col" *ngIf="selectedSubmission.score !== null">
+            <span class="score-verdict" [style.color]="getScoreColor(selectedSubmission.score)">
+              {{ getScoreLabel(selectedSubmission.score) }}
+            </span>
+            <span class="status-chip" [ngClass]="selectedSubmission.status">
+              {{ selectedSubmission.status.replace('_', ' ') | titlecase }}
+            </span>
+          </div>
+          <div class="score-meta-col" *ngIf="selectedSubmission.score === null">
+            <span class="score-verdict" style="color:var(--color-text-secondary)">Not scored</span>
+            <span class="status-chip" [ngClass]="selectedSubmission.status">
+              {{ selectedSubmission.status.replace('_', ' ') | titlecase }}
+            </span>
+          </div>
+
+          <!-- Technical Decision Button -->
+          <button class="btn-decision-header" (click)="openDecisionModal(selectedSubmission)">
+            📋 Technical Decision
+          </button>
+        </div>
+      </div>
+
+      <!-- ══ 3 TABS ══ -->
+      <div class="detail-tabs">
+        <button class="detail-tab"
+                [class.active]="activeTab === 'responses'"
+                (click)="activeTab = 'responses'; activeEventFilter = 'all'">
+          📋 Responses &amp; Results
+        </button>
+        <button class="detail-tab"
+                [class.active]="activeTab === 'summary'"
+                (click)="activeTab = 'summary'">
+          📊 Summary
+        </button>
+        <button class="detail-tab anticheat-tab"
+                [class.active]="activeTab === 'anticheat'"
+                (click)="activeTab = 'anticheat'; activeEventFilter = 'all'">
+          🛡 Anti-cheat Report
+          <span class="tab-risk-badge"
+                [class.badge-high]="antiCheatRisk === 'high'"
+                [class.badge-medium]="antiCheatRisk === 'medium'"
+                *ngIf="antiCheatRisk !== 'none'">
+            {{ antiCheatRisk === 'high' ? 'HIGH' : antiCheatRisk === 'medium' ? 'MEDIUM' : '' }}
+          </span>
+        </button>
+      </div>
+
+      <!-- ══════════════════════════════
+           TAB 1 : Responses & Results
+      ══════════════════════════════ -->
+      <div class="tab-content" *ngIf="activeTab === 'responses'">
+
+        <!-- QCM Banner -->
+        <div class="qcm-banner"
+             *ngIf="test?.qcm?.questions?.length && selectedSubmission.qcmAnswers?.length">
+          <div class="banner-left">
+            <span class="banner-label">QCM Score</span>
+            <span class="banner-fraction">{{ qcmScore.earned }} / {{ qcmScore.max }} pts</span>
+          </div>
+          <div class="banner-bar-wrap">
+            <div class="banner-bar">
+              <div class="banner-bar-fill"
+                   [style.width]="qcmPercent + '%'"
+                   [style.background]="getScoreColor(qcmPercent)">
+              </div>
+            </div>
+            <span class="banner-pct" [style.color]="getScoreColor(qcmPercent)">
+              {{ qcmPercent }}%
+            </span>
+          </div>
+        </div>
+
+        <!-- QCM Answers -->
+        <div class="qa-wrap" *ngIf="test?.qcm?.questions?.length">
+          <div class="qa-section-title">QCM Answers</div>
+
+          <div class="qa-card"
+               *ngFor="let q of test!.qcm!.questions; let i = index"
+               [class.correct]="isQuestionCorrect(q) === true"
+               [class.incorrect]="isQuestionCorrect(q) === false"
+               [class.open-q]="q.type === 'open'">
+
+            <div class="qa-card-header">
+              <div class="qa-num">Q{{ i + 1 }}</div>
+              <div class="qa-question-text">{{ q.questionText }}</div>
+              <div class="qa-verdict">
+                <span class="verdict-chip correct-chip" *ngIf="isQuestionCorrect(q) === true">
+                  ✓ +{{ q.points }}pt{{ q.points !== 1 ? 's' : '' }}
+                </span>
+                <span class="verdict-chip incorrect-chip" *ngIf="isQuestionCorrect(q) === false">
+                  ✕ 0/{{ q.points }}
+                </span>
+                <span class="verdict-chip open-chip" *ngIf="q.type === 'open'">✏ Open</span>
+              </div>
+            </div>
+
+            <div class="qa-options" *ngIf="q.type !== 'open'">
+              <div class="qa-option"
+                   *ngFor="let opt of q.options"
+                   [class.opt-selected]="isOptionSelected(q, opt)"
+                   [class.opt-correct]="opt.isCorrect"
+                   [class.opt-wrong]="isOptionSelected(q, opt) && !opt.isCorrect"
+                   [class.opt-missed]="!isOptionSelected(q, opt) && opt.isCorrect">
+                <div class="opt-indicator">
+                  <span *ngIf="isOptionSelected(q, opt) && opt.isCorrect">✓</span>
+                  <span *ngIf="isOptionSelected(q, opt) && !opt.isCorrect">✕</span>
+                  <span *ngIf="!isOptionSelected(q, opt) && opt.isCorrect">◎</span>
+                  <span *ngIf="!isOptionSelected(q, opt) && !opt.isCorrect">○</span>
+                </div>
+                <span class="opt-text">{{ opt.text }}</span>
+                <span class="opt-badge badge-correct" *ngIf="opt.isCorrect">correct</span>
+                <span class="opt-badge badge-selected" *ngIf="isOptionSelected(q, opt) && !opt.isCorrect">selected</span>
+              </div>
+            </div>
+
+            <div class="open-answer" *ngIf="q.type === 'open'">
+              <div class="open-answer-label">Candidate's Answer</div>
+              <div class="open-answer-text" *ngIf="getQuestionAnswer(q)?.openText; else noOpen">
+                {{ getQuestionAnswer(q)!.openText }}
+              </div>
+              <ng-template #noOpen>
+                <div class="open-no-answer">No answer provided</div>
+              </ng-template>
+            </div>
+          </div>
+        </div>
+
+        <!-- Code Submission -->
+        <div class="code-section" *ngIf="selectedSubmission.code">
+          <div class="qa-section-title">Code Submission</div>
+          <div class="code-wrap">
+            <div class="code-header" (click)="codeExpanded = !codeExpanded">
+              <div class="code-header-left">
+                <span class="code-lang-dot"></span>
+                <span class="code-filename">solution</span>
+                <span class="code-lang-badge" *ngIf="selectedSubmission.language">
+                  {{ selectedSubmission.language }}
+                </span>
+              </div>
+              <button class="toggle-code-btn">
+                {{ codeExpanded ? '▲ Collapse' : '▼ Expand' }}
+              </button>
+            </div>
+            <div class="code-body" [class.expanded]="codeExpanded">
+              <pre class="code-pre"><code>{{ selectedSubmission.code }}</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- No answers -->
+        <div class="no-answers"
+             *ngIf="!test?.qcm?.questions?.length && !selectedSubmission.code">
+          No answers to display for this submission.
+        </div>
+
+      </div><!-- /TAB responses -->
+
+      <!-- ══════════════════════════════
+           TAB 2 : Summary
+      ══════════════════════════════ -->
+      <div class="tab-content" *ngIf="activeTab === 'summary'">
+
+        <!-- Global score card -->
+        <div class="summary-score-card">
+          <div class="ssc-left">
+            <div class="ssc-ring-wrap">
+              <svg viewBox="0 0 90 90" class="ssc-ring">
+                <circle cx="45" cy="45" r="36" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="8"/>
+                <circle cx="45" cy="45" r="36" fill="none"
+                  [attr.stroke]="getScoreColor(selectedSubmission.score)"
+                  stroke-width="8" stroke-linecap="round"
+                  stroke-dasharray="226.19"
+                  [attr.stroke-dashoffset]="226.19 - (226.19 * (selectedSubmission.score ?? 0) / 100)"
+                  transform="rotate(-90 45 45)"/>
+              </svg>
+              <div class="ssc-ring-center">
+                <span class="ssc-score" [style.color]="getScoreColor(selectedSubmission.score)">
+                  {{ selectedSubmission.score ?? '—' }}
+                </span>
+                <span class="ssc-pct" *ngIf="selectedSubmission.score !== null">%</span>
+              </div>
+            </div>
+          </div>
+          <div class="ssc-right">
+            <p class="ssc-verdict" [style.color]="getScoreColor(selectedSubmission.score)">
+              {{ getScoreLabel(selectedSubmission.score) }}
+            </p>
+            <p class="ssc-pts">{{ selectedSubmission.score ?? 0 }} / {{ selectedSubmission.maxScore ?? 100 }} pts</p>
+            <div class="ssc-bar-track">
+              <div class="ssc-bar-fill"
+                   [style.width.%]="selectedSubmission.score ?? 0"
+                   [style.background]="getScoreColor(selectedSubmission.score)">
+              </div>
+            </div>
+            <div class="ssc-status-row">
+              <span class="status-chip" [ngClass]="selectedSubmission.status">
+                {{ selectedSubmission.status.replace('_', ' ') | titlecase }}
+              </span>
+              <span class="badge-gold" *ngIf="isTopCandidate(selectedSubmission)">🏆 Top 1</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Meta info grid -->
+        <div class="summary-meta-grid">
+          <div class="smg-item">
+            <span class="smg-icon">📋</span>
+            <div>
+              <span class="smg-label">Test</span>
+              <span class="smg-val">{{ getTypeLabel(test?.testType ?? '') }}</span>
+            </div>
+          </div>
+          <div class="smg-item">
+            <span class="smg-icon">🎯</span>
+            <div>
+              <span class="smg-label">Difficulty</span>
+              <span class="smg-val" [style.color]="getDiffColor(test?.difficulty ?? '')">
+                {{ test?.difficulty | titlecase }}
+              </span>
+            </div>
+          </div>
+          <div class="smg-item">
+            <span class="smg-icon">⏱</span>
+            <div>
+              <span class="smg-label">Time spent</span>
+              <span class="smg-val">{{ getTimeSpent(selectedSubmission) }}</span>
+            </div>
+          </div>
+          <div class="smg-item">
+            <span class="smg-icon">📅</span>
+            <div>
+              <span class="smg-label">Submitted on</span>
+              <span class="smg-val">{{ formatDate(selectedSubmission.submittedAt) }}</span>
+            </div>
+          </div>
+          <div class="smg-item">
+            <span class="smg-icon">🏅</span>
+            <div>
+              <span class="smg-label">Ranking</span>
+              <span class="smg-val">
+                {{ getRank(selectedSubmission) !== null ? '#' + getRank(selectedSubmission) : '—' }}
+              </span>
+            </div>
+          </div>
+          <div class="smg-item">
+            <span class="smg-icon">👤</span>
+            <div>
+              <span class="smg-label">Candidate</span>
+              <span class="smg-val">{{ selectedSubmission.candidate?.name }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Score breakdown -->
+        <div class="summary-breakdown" *ngIf="hasBreakdown(selectedSubmission.scoreBreakdown)">
+          <p class="summary-section-title">Score by question</p>
+
+          <!-- Tests passed (problem solving) -->
+          <div class="breakdown-ps-row"
+               *ngIf="selectedSubmission.scoreBreakdown['testsPassed'] !== undefined">
+            <div class="bps-header">
+              <span class="bps-label">⌨ Code — Tests passed</span>
+              <span class="bps-fraction">
+                {{ selectedSubmission.scoreBreakdown['testsPassed'] }}
+                / {{ selectedSubmission.scoreBreakdown['testsTotal'] }}
+              </span>
+            </div>
+            <div class="bps-bar-track">
+              <div class="bps-bar-fill"
+                   [style.width.%]="getTestsPassedPct(selectedSubmission.scoreBreakdown)"
+                   [style.background]="getScoreColor(getTestsPassedPct(selectedSubmission.scoreBreakdown))">
+              </div>
+            </div>
+            <div class="bps-complexity" *ngIf="selectedSubmission.scoreBreakdown['complexityTime']">
+              <span class="bps-meta">
+                ⚙ Time complexity: <strong>{{ selectedSubmission.scoreBreakdown['complexityTime'] }}</strong>
+              </span>
+              <span class="bps-meta" *ngIf="selectedSubmission.scoreBreakdown['complexitySpace']">
+                💾 Space: <strong>{{ selectedSubmission.scoreBreakdown['complexitySpace'] }}</strong>
+              </span>
+            </div>
+          </div>
+
+          <!-- QCM score -->
+          <div class="breakdown-qcm-row"
+               *ngIf="selectedSubmission.scoreBreakdown['qcm'] !== undefined">
+            <div class="bqs-header">
+              <span class="bqs-label">☑ QCM</span>
+              <span class="bqs-val"
+                    [style.color]="getScoreColor(qcmPercent)">
+                {{ selectedSubmission.scoreBreakdown['qcm'] }}
+                / {{ selectedSubmission.scoreBreakdown['total'] }} pts
+              </span>
+            </div>
+            <div class="bps-bar-track">
+              <div class="bps-bar-fill"
+                   [style.width.%]="qcmPercent"
+                   [style.background]="getScoreColor(qcmPercent)">
+              </div>
+            </div>
+          </div>
+
+          <!-- Pending code review -->
+          <div class="breakdown-pending"
+               *ngIf="selectedSubmission.scoreBreakdown['code'] === 'pending_review'">
+            <span class="pending-icon">⏳</span>
+            <span>Code pending manual review</span>
+          </div>
+        </div>
+
+        <!-- Final Decision -->
+        <div class="summary-decision">
+          <p class="summary-section-title">Technical Test Decision</p>
+          <p class="summary-decision-hint">
+            Based on the evaluation results, make a final decision for this candidate.
+          </p>
+          <div class="decision-btn-row">
+            <button class="btn-decision-reject" (click)="openDecisionModal(selectedSubmission)">
+              📋 Technical Decision
+            </button>
+          </div>
+        </div>
+
+      </div><!-- /TAB summary -->
+
+      <!-- ══════════════════════════════
+           TAB 3 : Anti-cheat Report
+      ══════════════════════════════ -->
+      <div class="tab-content anticheat-tab-content" *ngIf="activeTab === 'anticheat'">
+
+        <!-- Risk banner -->
+        <div class="ac-banner"
+             [class.ac-banner-high]="antiCheatRisk === 'high'"
+             [class.ac-banner-medium]="antiCheatRisk === 'medium'"
+             [class.ac-banner-low]="antiCheatRisk === 'low'"
+             [class.ac-banner-none]="antiCheatRisk === 'none'">
+
+          <div class="ac-shield-wrap">
+            <span class="ac-shield-icon">🛡</span>
+          </div>
+
+          <div class="ac-banner-body">
+            <h3 class="ac-risk-title">{{ antiCheatRiskLabel }}</h3>
+            <p class="ac-risk-sub">
+              {{ antiCheatReport?.totalSuspiciousEvents ?? 0 }} suspicious event(s) recorded
+            </p>
+          </div>
+
+          <div class="ac-counters">
+            <div class="ac-counter">
+              <span class="ac-counter-num" [class.num-alert]="antiCheatRisk !== 'none'">
+                {{ antiCheatReport?.tabChanges ?? 0 }}
+              </span>
+              <span class="ac-counter-lbl">Tab changes</span>
+            </div>
+            <div class="ac-counter">
+              <span class="ac-counter-num" [class.num-alert]="(antiCheatReport?.pastes ?? 0) > 0">
+                {{ antiCheatReport?.pastes ?? 0 }}
+              </span>
+              <span class="ac-counter-lbl">Pastes</span>
+            </div>
+            <div class="ac-counter">
+              <span class="ac-counter-num">
+                {{ antiCheatReport?.focusGains ?? 0 }}
+              </span>
+              <span class="ac-counter-lbl">Focus gains</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filter pills -->
+        <div class="ac-filters" *ngIf="(antiCheatReport?.events?.length ?? 0) > 0">
+          <button class="ac-pill" [class.active]="activeEventFilter === 'all'"
+                  (click)="activeEventFilter = 'all'">
+            All
+            <span class="ac-pill-count">{{ antiCheatReport?.events?.length ?? 0 }}</span>
+          </button>
+          <button class="ac-pill" [class.active]="activeEventFilter === 'focus_loss'"
+                  (click)="activeEventFilter = 'focus_loss'"
+                  *ngIf="(antiCheatReport?.focusLosses ?? 0) > 0">
+            <span class="ac-dot dot-orange"></span>
+            Focus losses
+            <span class="ac-pill-count">{{ antiCheatReport?.focusLosses ?? 0 }}</span>
+          </button>
+          <button class="ac-pill" [class.active]="activeEventFilter === 'tab_hidden'"
+                  (click)="activeEventFilter = 'tab_hidden'"
+                  *ngIf="(antiCheatReport?.tabChanges ?? 0) > 0">
+            <span class="ac-dot dot-orange"></span>
+            Hidden tabs
+            <span class="ac-pill-count">{{ antiCheatReport?.tabChanges ?? 0 }}</span>
+          </button>
+          <button class="ac-pill" [class.active]="activeEventFilter === 'focus_gain'"
+                  (click)="activeEventFilter = 'focus_gain'"
+                  *ngIf="(antiCheatReport?.focusGains ?? 0) > 0">
+            <span class="ac-dot dot-gray"></span>
+            Focus regains
+            <span class="ac-pill-count">{{ antiCheatReport?.focusGains ?? 0 }}</span>
+          </button>
+          <button class="ac-pill" [class.active]="activeEventFilter === 'paste_detected'"
+                  (click)="activeEventFilter = 'paste_detected'"
+                  *ngIf="(antiCheatReport?.pastes ?? 0) > 0">
+            <span class="ac-dot dot-yellow"></span>
+            Pastes
+            <span class="ac-pill-count">{{ antiCheatReport?.pastes ?? 0 }}</span>
+          </button>
+        </div>
+
+        <!-- Event timeline -->
+        <div class="ac-timeline" *ngIf="filteredEvents.length > 0">
+          <div class="ac-timeline-header">
+            <span class="ac-timeline-title">Event timeline</span>
+            <span class="ac-timeline-count">{{ filteredEvents.length }}</span>
+          </div>
+
+          <div class="ac-timeline-list">
+            <div class="ac-event-item" *ngFor="let evt of filteredEvents">
+              <div class="ac-event-time">{{ evt.timeLabel }}</div>
+              <div class="ac-event-icon" [ngClass]="getEventIconClass(evt.type)">
+                {{ getEventEmoji(evt.type) }}
+              </div>
+              <div class="ac-event-body">
+                <div class="ac-event-label">{{ getEventLabel(evt.type) }}</div>
+                <div class="ac-event-detail">{{ evt.detail }} — count: {{ evt.count }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- No events -->
+        <div class="ac-no-events" *ngIf="(antiCheatReport?.events?.length ?? 0) === 0">
+          <span class="ac-no-events-icon">✓</span>
+          <p class="ac-no-events-title">No suspicious events detected</p>
+          <p class="ac-no-events-sub">The candidate did not leave the window or paste code.</p>
+        </div>
+
+      </div><!-- /TAB anticheat -->
+
+    </div><!-- /answers-wrap -->
+  </main>
+</div>
+
+<!-- TECHNICAL DECISION MODAL -->
+<div class="modal-backdrop" *ngIf="showDecisionModal && decisionSubmission" (click)="closeDecisionModal()">
+  <div class="modal" (click)="$event.stopPropagation()">
+
+    <div class="modal-header">
+      <div>
+        <p class="modal-eyebrow">Candidate Result</p>
+        <h2 class="modal-title">Technical Test Decision</h2>
+      </div>
+      <button class="modal-close" (click)="closeDecisionModal()">✕</button>
+    </div>
+
+    <div class="modal-candidate-row">
+      <div class="avatar" [style.background]="decisionSubmission.candidate?.avatarColor || 'linear-gradient(135deg,#4f6ef7,#7c3aed)'">
+        {{ getInitials(decisionSubmission.candidate!.name) }}
+      </div>
+      <div class="candidate-meta">
+        <span class="candidate-name">{{ decisionSubmission.candidate?.name }}</span>
+        <span class="candidate-email">{{ decisionSubmission.candidate?.email }}</span>
+      </div>
+      <div class="candidate-badges">
+        <span class="badge badge-green" *ngIf="(decisionSubmission.score ?? 0) >= 80">Strong Candidate</span>
+      </div>
+    </div>
+
+    <div class="modal-score-section">
+      <p class="section-label">Overall Score</p>
+      <div class="score-layout">
+        <div class="score-ring-wrap">
+          <svg class="score-ring" viewBox="0 0 72 72">
+            <circle cx="36" cy="36" r="28" fill="none" stroke="#1e2538" stroke-width="7"/>
+            <circle cx="36" cy="36" r="28" fill="none"
+              [attr.stroke]="getScoreColor(decisionSubmission.score ?? null)"
+              stroke-width="7" stroke-linecap="round"
+              stroke-dasharray="175.93"
+              [attr.stroke-dashoffset]="175.93 - (175.93 * (decisionSubmission.score ?? 0) / 100)"
+              transform="rotate(-90 36 36)"/>
+          </svg>
+          <span class="score-center-val" [style.color]="getScoreColor(decisionSubmission.score ?? null)">
+            {{ decisionSubmission.score ?? '—' }}%
+          </span>
+        </div>
+        <div class="score-detail">
+          <p class="score-pts">{{ decisionSubmission.score ?? 0 }} / 100 pts</p>
+          <div class="score-bar-track">
+            <div class="score-bar-fill"
+              [style.width.%]="decisionSubmission.score ?? 0"
+              [style.background]="getScoreColor(decisionSubmission.score ?? null)">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="info-chips">
+        <div class="chip">
+          <span class="chip-label">Test</span>
+          <span class="chip-val">{{ decisionSubmission.technicalTest?.testType | titlecase }}</span>
+        </div>
+        <div class="chip">
+          <span class="chip-label">Submitted</span>
+          <span class="chip-val">{{ formatDate(decisionSubmission.submittedAt ?? '') }}</span>
+        </div>
+        <div class="chip">
+          <span class="chip-label">Status</span>
+          <span class="chip-val" [style.color]="decisionSubmission.techStatus === 'approved' ? '#4ade80' : decisionSubmission.techStatus === 'rejected' ? '#ef4444' : '#818cf8'">
+            {{ decisionSubmission.techStatus | titlecase }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-reject-modal"
+        (click)="rejectFromModal()"
+        [disabled]="decisionSubmission.techStatus === 'rejected' || loadingAction">
+        {{ decisionSubmission.techStatus === 'rejected' ? 'Candidate Rejected' : 'Reject Candidate' }}
+      </button>
+      <button class="btn-approve-modal"
+        (click)="approveFromModal()"
+        [disabled]="decisionSubmission.techStatus === 'approved' || loadingAction">
+        {{ decisionSubmission.techStatus === 'approved' ? 'Candidate Approved' : 'Accept Candidate' }}
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- Loading -->
+<div class="full-state" *ngIf="loading">
+  <div class="spinner"></div>
+  <p>Loading test details...</p>
+</div>
+
+<!-- Error -->
+<div class="full-state" *ngIf="!loading && error">
+  <div class="err-icon">⚠</div>
+  <p class="err-msg">{{ error }}</p>
+  <button class="btn-retry" (click)="load()">Retry</button>
+</div>

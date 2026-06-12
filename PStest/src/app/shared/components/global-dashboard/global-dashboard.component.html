@@ -1,0 +1,192 @@
+<div class="dashboard-root">
+
+  <!-- ── Header ── -->
+  <div class="db-header">
+    <div>
+      <h2 class="db-title">Platform overview</h2>
+      <p class="db-subtitle">Recruitment · Tests · Submissions</p>
+    </div>
+    <div class="db-actions">
+      <span class="live-badge"><span class="live-dot"></span> Live</span>
+      <button class="btn-reload" (click)="reload()" title="Refresh">
+        <span class="material-icons" style="font-size:16px;">refresh</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Loading / Error ── -->
+  <div *ngIf="loading" class="db-loading">
+    <span class="material-icons spin">autorenew</span> Loading…
+  </div>
+  <div *ngIf="error" class="db-error">{{ error }}</div>
+
+  <ng-container *ngIf="!loading && !error">
+
+    <!-- ── Key Metrics ── -->
+    <section class="db-section">
+      <p class="section-label">Key metrics</p>
+      <div class="metric-grid">
+        <div class="metric-card">
+          <p class="metric-label">Total candidates</p>
+          <p class="metric-value">{{ metrics.totalCandidates }}</p>
+          <p class="metric-delta up">Active applicants</p>
+        </div>
+        <div class="metric-card">
+          <p class="metric-label">Open jobs</p>
+          <p class="metric-value">{{ metrics.openJobs }}</p>
+          <p class="metric-delta up">Currently active</p>
+        </div>
+        <div class="metric-card">
+          <p class="metric-label">Tests submitted</p>
+          <p class="metric-value">{{ metrics.totalSubmissions }}</p>
+          <p class="metric-delta up">All time</p>
+        </div>
+        <div class="metric-card">
+          <p class="metric-label">Pending review</p>
+          <p class="metric-value">{{ metrics.pendingReview }}</p>
+          <p class="metric-delta down">Needs action</p>
+        </div>
+        <div class="metric-card">
+          <p class="metric-label">Avg. RH score</p>
+          <p class="metric-value">{{ metrics.avgRhScore }}</p>
+          <p class="metric-delta neutral">Out of 100</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ── Pipeline ── -->
+    <section class="db-section">
+      <p class="section-label">Recruitment pipeline</p>
+      <div class="pipeline">
+        <div class="pipe-stage" *ngFor="let stage of pipeline; let last = last">
+          <div class="pipe-bar" [style.background]="stage.color"></div>
+          <div class="pipe-inner">
+            <p class="pipe-count" [style.color]="stage.color">{{ stage.count }}</p>
+            <p class="pipe-name">{{ stage.label }}</p>
+          </div>
+          <div class="pipe-arrow" *ngIf="!last">
+            <svg viewBox="0 0 10 10" width="10" height="10" fill="none">
+              <path d="M3 2l4 3-4 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ── Jobs + Submissions ── -->
+    <section class="db-section">
+      <div class="two-col">
+
+        <!-- Active job offers -->
+        <div>
+          <p class="section-label">Active job offers</p>
+          <div class="card">
+            <div class="job-row" *ngFor="let job of jobs">
+              <div class="job-info">
+                <p class="job-title">{{ job.title }}</p>
+                <p class="job-dept">{{ job.department }}
+                  <ng-container *ngIf="job.applicationsCount">· {{ job.applicationsCount }} applicants</ng-container>
+                </p>
+              </div>
+              <span class="badge" [ngClass]="getJobStatusClass(job.status)">{{ job.status }}</span>
+            </div>
+            <p class="empty-state" *ngIf="jobs.length === 0">No jobs found.</p>
+          </div>
+        </div>
+
+        <!-- Recent submissions -->
+        <div>
+          <p class="section-label">Recent submissions</p>
+          <div class="card">
+            <div class="sub-row" *ngFor="let sub of recentSubmissions">
+              <div class="avatar" [style.background]="sub.candidate?.avatarColor || 'linear-gradient(135deg,#4f6ef7,#7c3aed)'">
+                {{ getInitials(sub.candidate?.name) }}
+              </div>
+              <div class="sub-info">
+                <p class="sub-name">{{ sub.candidate?.name || '—' }}</p>
+                <p class="sub-meta">{{ sub.testKind | uppercase }} · {{ sub.job?.title }}</p>
+                <div class="score-bar-wrap" *ngIf="sub.score !== null">
+                  <div class="score-bar-fill"
+                       [style.width]="scoreWidth(sub.score)"
+                       [style.background]="scoreColor(sub.score)"></div>
+                </div>
+              </div>
+              <span class="badge" [ngClass]="getStatusClass(sub.status)" style="flex-shrink:0;">
+                {{ sub.status.replace('_', ' ') }}
+              </span>
+              <span class="sub-score" *ngIf="sub.score !== null">{{ sub.score }}%</span>
+            </div>
+            <p class="empty-state" *ngIf="recentSubmissions.length === 0">No submissions yet.</p>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ── Process Steps ── -->
+    <section class="db-section">
+      <p class="section-label">Recruitment process</p>
+      <div class="process-grid">
+        <div class="process-item" *ngFor="let step of processSteps">
+          <div class="process-icon" [style.background]="step.bg">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="5" [attr.fill]="step.color"/>
+            </svg>
+          </div>
+          <div class="process-info">
+            <p class="process-name">{{ step.name }}</p>
+            <p class="process-desc">{{ step.desc }}</p>
+          </div>
+          <span class="process-count" [style.color]="step.color">{{ step.count }}</span>
+        </div>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ── Status breakdown ── -->
+    <section class="db-section">
+      <p class="section-label">Submission status breakdown</p>
+      <div class="status-breakdown">
+        <div class="status-item">
+          <div class="status-bar-wrap">
+            <div class="status-bar-fill" [style.width]="'100%'" style="background:#378ADD;"></div>
+          </div>
+          <div class="status-meta">
+            <span class="badge badge-sub">submitted</span>
+            <span class="status-num">{{ statusCounts.submitted }}</span>
+          </div>
+        </div>
+        <div class="status-item">
+          <div class="status-bar-wrap">
+            <div class="status-bar-fill"
+                 [style.width]="metrics.totalSubmissions ? (statusCounts.evaluated / metrics.totalSubmissions * 100) + '%' : '0%'"
+                 style="background:#1D9E75;"></div>
+          </div>
+          <div class="status-meta">
+            <span class="badge badge-eval">evaluated</span>
+            <span class="status-num">{{ statusCounts.evaluated }}</span>
+          </div>
+        </div>
+        <div class="status-item">
+          <div class="status-bar-wrap">
+            <div class="status-bar-fill"
+                 [style.width]="metrics.totalSubmissions ? (statusCounts.pending_review / metrics.totalSubmissions * 100) + '%' : '0%'"
+                 style="background:#EF9F27;"></div>
+          </div>
+          <div class="status-meta">
+            <span class="badge badge-rev">pending review</span>
+            <span class="status-num">{{ statusCounts.pending_review }}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </ng-container>
+</div>

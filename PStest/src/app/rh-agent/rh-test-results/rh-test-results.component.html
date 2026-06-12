@@ -1,0 +1,302 @@
+<div class="rtr-container">
+
+  <!-- ══ Header ══ -->
+  <div class="rtr-header">
+    <div>
+      <h1 class="rtr-title">RH Test Results</h1>
+      <p class="rtr-subtitle">Personality profiles and answers for each candidate.</p>
+    </div>
+  <button class="rtr-btn rtr-btn-icon" *ngIf="preFilterJobId" (click)="goBack()" title="Back to Tests">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M19 12H5"/><path d="m12 19-7-7 7-7"/>
+  </svg>
+  Back to Tests
+</button>
+  </div>
+
+
+
+  <!-- ══ Loading ══ -->
+  <div *ngIf="loading" class="rtr-center">
+    <div class="rtr-spinner"></div>
+    <p>Loading results…</p>
+  </div>
+
+  <!-- ══ Error ══ -->
+  <div *ngIf="error" class="rtr-alert rtr-alert-error">{{ error }}</div>
+
+  <!-- ══ Empty ══ -->
+  <div *ngIf="!loading && !error && filtered.length === 0" class="rtr-empty">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.35">
+      <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+    </svg>
+    <p>No results found.</p>
+  </div>
+
+  <!-- ══ Jobs accordion ══ -->
+  <div *ngIf="!loading && !error" class="rtr-jobs">
+    <div *ngFor="let job of filtered" class="rtr-job-card">
+
+      <!-- Job header -->
+      <div class="rtr-job-header" (click)="toggleJob(job.jobId)">
+        <div class="rtr-job-left">
+          <div class="rtr-job-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="7" width="20" height="14" rx="2"/>
+              <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+            </svg>
+          </div>
+          <div>
+            <div class="rtr-job-title">{{ job.jobTitle }}</div>
+            <div class="rtr-job-dept">{{ job.department }}</div>
+          </div>
+        </div>
+        <div class="rtr-job-stats">
+          <div class="rtr-stat">
+            <span class="rtr-stat-val">{{ totalCandidates(job) }}</span>
+            <span class="rtr-stat-lbl">Candidates</span>
+          </div>
+          <div class="rtr-stat">
+            <span class="rtr-stat-val">{{ evaluatedCount(job) }}</span>
+            <span class="rtr-stat-lbl">Evaluated</span>
+          </div>
+          <div class="rtr-stat">
+            <span class="rtr-stat-val" [style.color]="getScoreColor(avgScore(job))">
+              {{ avgScore(job) !== null ? (avgScore(job) + '%') : '—' }}
+            </span>
+            <span class="rtr-stat-lbl">Avg score</span>
+          </div>
+          <svg class="rtr-chevron" [class.rtr-chevron-open]="isJobExpanded(job.jobId)"
+               width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="m6 9 6 6 6-6"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- ══ Candidates list ══ -->
+      <div class="rtr-candidates" [class.rtr-expanded]="isJobExpanded(job.jobId)">
+        <div *ngFor="let cand of job.candidates" class="rtr-cand-block">
+
+          <!-- Candidate row -->
+          <div class="rtr-cand-row" (click)="toggleCandidate(cand.candidateId)">
+            <div class="rtr-avatar" [style.background]="cand.avatarColor || '#6366f1'">
+              {{ getInitials(cand.candidateName) }}
+            </div>
+            <div class="rtr-cand-info">
+              <div class="rtr-cand-name">{{ cand.candidateName }}</div>
+              <div class="rtr-cand-email">{{ cand.candidateEmail }}</div>
+            </div>
+
+            <div class="rtr-cand-right">
+              <span class="rtr-badge" [ngClass]="getStatusClass(cand.status)">
+                {{ getStatusLabel(cand.status) }}
+              </span>
+              <div class="rtr-score-pill"
+                   [style.background]="getScoreColor(cand.latestScore) + '22'"
+                   [style.color]="getScoreColor(cand.latestScore)"
+                   [style.border-color]="getScoreColor(cand.latestScore) + '55'">
+                {{ cand.latestScore !== null ? cand.latestScore + '%' : 'N/A' }}
+              </div>
+
+          
+              <svg class="rtr-chevron" [class.rtr-chevron-open]="isCandidateExpanded(cand.candidateId)"
+                   width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="m6 9 6 6 6-6"/>
+              </svg>
+            </div>
+          </div>
+
+          <!-- ══ Submissions detail ══ -->
+          <div class="rtr-submissions" [class.rtr-expanded]="isCandidateExpanded(cand.candidateId)">
+            <div *ngFor="let sub of cand.submissions" class="rtr-sub-card">
+
+              <!-- Sub header -->
+              <div class="rtr-sub-header">
+                <div class="rtr-sub-test-name">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                  </svg>
+                  {{ sub.rhTest?.name || 'RH Test' }}
+                </div>
+                <div class="rtr-sub-meta">
+                  Submitted {{ sub.submittedAt | date:'MMM d, y · HH:mm' }}
+                  <span *ngIf="sub.evaluatedAt"> · Evaluated {{ sub.evaluatedAt | date:'MMM d, y' }}</span>
+                </div>
+              </div>
+
+              <!-- ══ Score + Criterion Bars ══ -->
+              <div class="rtr-sub-body">
+                <div class="rtr-score-section">
+                  <div class="rtr-score-circle" [style.--score-color]="getScoreColor(sub.score)">
+                    <span class="rtr-score-num">{{ sub.score !== null ? sub.score : '—' }}</span>
+                    <span class="rtr-score-pct" *ngIf="sub.score !== null">%</span>
+                  </div>
+                  <div class="rtr-score-label">Overall score</div>
+                  <div class="rtr-dominant" *ngIf="getDominant(sub) as dom">
+                    <span class="rtr-dominant-dot" [style.background]="dom.color"></span>
+                    Dominant: <strong [style.color]="dom.color">{{ dom.label }}</strong>
+                  </div>
+                </div>
+
+                <div class="rtr-criterion-section" *ngIf="getCriterionBreakdown(sub).length > 0">
+                  <div class="rtr-section-label">Personality breakdown</div>
+                  <div *ngFor="let cr of getCriterionBreakdown(sub)" class="rtr-criterion-row">
+                    <div class="rtr-criterion-meta">
+                      <span class="rtr-criterion-dot" [style.background]="cr.color"></span>
+                      <span class="rtr-criterion-label">{{ cr.label }}</span>
+                      <span class="rtr-criterion-key">({{ cr.key }})</span>
+                    </div>
+                    <div class="rtr-bar-track">
+                      <div class="rtr-bar-fill" [style.width.%]="cr.percentage" [style.background]="cr.color"></div>
+                    </div>
+                    <span class="rtr-criterion-pct" [style.color]="cr.color">{{ cr.percentage }}%</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ══ Q&A Section ══ -->
+              <div class="rtr-qa-section" *ngIf="getCandidateQA(sub).length > 0">
+                <div class="rtr-qa-header">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                  <span>Candidate answers ({{ getCandidateQA(sub).length }})</span>
+                </div>
+                <div class="rtr-qa-list">
+                  <div *ngFor="let qa of getCandidateQA(sub); let i = index" class="rtr-qa-item">
+                    <div class="rtr-qa-q">
+                      <span class="rtr-qa-num">{{ i + 1 }}</span>
+                      <span class="rtr-qa-type-badge rtr-qa-type-{{ qa.answerType }}">
+                        {{ qa.answerType === 'likert' ? 'Likert' : qa.answerType }}
+                      </span>
+                      <span>{{ qa.question }}</span>
+                    </div>
+                    <div class="rtr-qa-a">{{ qa.answer }}</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Actions — replaced manual scoring with RH Decision button -->
+              <div class="rtr-sub-actions">
+                <button class="rtr-btn-decision" (click)="openDecisionModal(sub, cand, job.jobId)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 11l3 3L22 4"/>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                  </svg>
+                  RH Test Decision
+                </button>
+              </div>
+
+            </div><!-- /rtr-sub-card -->
+          </div><!-- /rtr-submissions -->
+        </div><!-- /rtr-cand-block -->
+      </div><!-- /rtr-candidates -->
+    </div><!-- /rtr-job-card -->
+  </div><!-- /rtr-jobs -->
+
+</div><!-- /rtr-container -->
+
+<!-- ══════════════════════════════════════════════════ -->
+<!-- RH Decision Modal                                 -->
+<!-- ══════════════════════════════════════════════════ -->
+<div class="modal-backdrop"
+     *ngIf="showDecisionModal && selectedSubmission && selectedCandidate"
+     (click)="closeDecisionModal()">
+  <div class="modal" (click)="$event.stopPropagation()">
+
+    <!-- Header -->
+    <div class="modal-header">
+      <div>
+        <p class="modal-eyebrow">Candidate Result</p>
+        <h2 class="modal-title">RH Test Decision</h2>
+      </div>
+      <button class="modal-close" (click)="closeDecisionModal()">✕</button>
+    </div>
+
+    <!-- Candidate row -->
+    <div class="modal-candidate-row">
+      <div class="avatar" [style.background]="selectedCandidate.avatarColor || 'linear-gradient(135deg,#4f6ef7,#7c3aed)'">
+        {{ getInitials(selectedCandidate.candidateName) }}
+      </div>
+      <div class="candidate-meta">
+        <span class="candidate-name">{{ selectedCandidate.candidateName }}</span>
+        <span class="candidate-email">{{ selectedCandidate.candidateEmail }}</span>
+      </div>
+      <div class="candidate-badges">
+        <span class="badge badge-green" *ngIf="(selectedSubmission.score ?? 0) >= 75">Strong Candidate</span>
+      </div>
+    </div>
+
+    <!-- Score section -->
+    <div class="modal-score-section">
+      <p class="section-label">Overall Score</p>
+      <div class="score-layout">
+        <div class="score-ring-wrap">
+          <svg class="score-ring" viewBox="0 0 72 72">
+            <circle cx="36" cy="36" r="28" fill="none" stroke="#1e2538" stroke-width="7"/>
+            <circle cx="36" cy="36" r="28" fill="none"
+              [attr.stroke]="getScoreColor(selectedSubmission.score ?? null)"
+              stroke-width="7" stroke-linecap="round"
+              stroke-dasharray="175.93"
+              [attr.stroke-dashoffset]="175.93 - (175.93 * (selectedSubmission.score ?? 0) / 100)"
+              transform="rotate(-90 36 36)"/>
+          </svg>
+          <span class="score-center-val" [style.color]="getScoreColor(selectedSubmission.score ?? null)">
+            {{ selectedSubmission.score ?? '—' }}%
+          </span>
+        </div>
+        <div class="score-detail">
+          <p class="score-pts">{{ selectedSubmission.score ?? 0 }} / 100 pts</p>
+          <div class="score-bar-track">
+            <div class="score-bar-fill"
+              [style.width.%]="selectedSubmission.score ?? 0"
+              [style.background]="getScoreColor(selectedSubmission.score ?? null)">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dominant trait -->
+      <div class="modal-dominant-row" *ngIf="getDominantFromBreakdown(selectedSubmission.scoreBreakdown) as dom">
+        <span class="dominant-dot" [style.background]="dom.color"></span>
+        <span class="dominant-label">Dominant trait:</span>
+        <strong [style.color]="dom.color">{{ dom.label }}</strong>
+      </div>
+
+      <!-- Info chips -->
+      <div class="info-chips">
+        <div class="chip">
+          <span class="chip-label">Test</span>
+          <span class="chip-val">{{ selectedSubmission.rhTest?.name || 'RH Test' }}</span>
+        </div>
+        <div class="chip">
+          <span class="chip-label">Submitted</span>
+          <span class="chip-val">{{ selectedSubmission.submittedAt | date:'dd MMM yyyy' }}</span>
+        </div>
+        <div class="chip">
+          <span class="chip-label">RH Status</span>
+          <span class="chip-val"
+            [style.color]="selectedCandidate.rhApproved ? '#4ade80' : '#818cf8'">
+            {{ selectedCandidate.rhApproved ? 'Approved' : 'Pending' }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="modal-actions">
+      <button class="btn-reject-modal"
+        (click)="rejectFromModal()"
+        [disabled]="selectedCandidate.rhApproved || loadingAction">
+        {{ selectedCandidate.rhApproved ? 'Decision Made' : 'Reject Candidate' }}
+      </button>
+      <button class="btn-approve-modal"
+        (click)="approveFromModal()"
+        [disabled]="selectedCandidate.rhApproved || loadingAction">
+        {{ selectedCandidate.rhApproved ? 'RH Approved ✓' : 'Accept Candidate' }}
+      </button>
+    </div>
+
+  </div>
+</div>

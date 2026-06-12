@@ -1,0 +1,60 @@
+<div class="admin-wrapper">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <span class="logo-icon">⚡</span>
+      <span class="logo-text">Nexus <strong>Peak</strong></span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a class="nav-item" routerLink="/dashboard" routerLinkActive="active">
+        <i class="icon">▦</i> Dashboard
+      </a>
+      <a class="nav-item active" routerLink="userMangement" routerLinkActive="active">
+        <i class="icon">👥</i> User Management
+      </a>
+    
+      <a class="nav-item" routerLink="candidates" routerLinkActive="active">
+        <i class="icon">💼</i> Jobs Overview
+      </a>
+        <a routerLink="interview-scheduler" routerLinkActive="active" class="nav-item">
+    <i class="fa-solid fa-calendar-alt nav-icon"></i>
+    <span>Interview Scheduler</span>
+  </a>
+    </nav>
+
+<div class="nav-bottom">
+  <a (click)="logout()" class="nav-item">
+    <span class="nav-icon">⚙</span>
+    <span>log out</span>
+  </a>
+</div>
+  </aside>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Top Bar -->
+    <header class="topbar">
+      <div></div>
+      <div class="topbar-actions">
+        <button class="icon-btn">🔔</button>
+        <button class="icon-btn">☀</button>
+        <div class="user-profile">
+          <div class="avatar" *ngIf="currentUser"> {{ currentUser.email?.charAt(0)?.toUpperCase() }}</div>
+          <div class="user-info" *ngIf="currentUser">
+          <div>
+            <div class="user-name">{{ currentUser.email }}</div>
+            <div class="user-role">{{ currentUser.role }}</div>
+          </div>
+        </div>
+        </div>
+      </div>
+    </header>
+  <app-session-expired-modal></app-session-expired-modal>
+
+    <!-- Router Outlet -->
+    <div class="content-area">
+      <router-outlet></router-outlet>
+    </div>
+  </div>
+</div>

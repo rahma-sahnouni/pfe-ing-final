@@ -1,0 +1,100 @@
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 12, 20, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+  animation: fadeIn .2s ease;
+}
+
+.confirm-panel {
+  background: #13151f;               /* same as cards */
+  border: 1px solid #1e2235;         /* same border */
+  border-radius: 16px;
+  width: 400px;
+  max-width: 92vw;
+  padding: 36px 32px 28px;
+  text-align: center;
+  box-shadow: 0 24px 80px rgba(0,0,0,.45);
+  animation: popIn .25s cubic-bezier(.16,1,.3,1);
+}
+
+.confirm-icon {
+  font-size: 36px;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: rgba(239,68,68,0.12);
+  color: #ef4444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 18px;
+}
+
+.confirm-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;                       /* dark UI text */
+  margin: 0 0 10px;
+}
+
+.confirm-body {
+  font-size: 14px;
+  color: #9ca3af;                    /* secondary text */
+  line-height: 1.6;
+  margin: 0 0 26px;
+}
+
+.confirm-footer {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.btn-cancel {
+  padding: 9px 22px;
+  border-radius: 8px;
+  border: 1px solid #1e2235;
+  background: #1a1d2e;
+  color: #e2e8f0;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .15s;
+}
+
+.btn-cancel:hover:not(:disabled) {
+  background: #23263a;
+}
+
+.btn-delete {
+  padding: 9px 22px;
+  border-radius: 8px;
+  border: none;
+  background: #ef4444;               /* danger color used in status */
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+}
+
+.btn-delete:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+.btn-cancel:disabled,
+.btn-delete:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.error-msg {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: #ef4444;
+}

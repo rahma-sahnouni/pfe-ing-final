@@ -1,0 +1,283 @@
+/* You can add global styles to this file, and also import other style files */
+
+html, body { height: 100%; }
+body { margin: 0; font-family: Roboto, "Helvetica Neue", sans-serif; }
+/* Dark Mode (par défaut) */
+body.dark-mode {
+  --bg-main: #0f1117;
+  --bg-sidebar: #13151f;
+  --color-text: #e2e8f0;
+  --color-accent: #4f6ef7;
+}
+
+/* Light Mode */
+body.light-mode {
+  --bg-main: #f9f9f9;
+  --bg-sidebar: #fff;
+  --color-text: #1f2937;
+  --color-accent: #4f6ef7;
+}
+
+/* Utilisation des variables dans le layout */
+.rh-layout {
+  background: var(--bg-main);
+  color: var(--color-text);
+}
+
+.sidebar {
+  background: var(--bg-sidebar);
+  border-right: 1px solid #ccc;
+}
+
+.brand-icon {
+  background: var(--color-accent);
+}
+
+/* Pour les boutons */
+.icon-btn {
+  color: var(--color-text);
+  background: var(--bg-sidebar);
+}
+
+
+/* =============================================== */
+/* DEADLINE BANNERS (paste at the bottom of job-tests.component.css) */
+/* =============================================== */
+
+@keyframes bannerSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.deadline-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  margin-bottom: 18px;
+  border: 1px solid transparent;
+  position: relative;
+  animation: bannerSlideIn 0.3s ease;
+}
+
+.deadline-banner.missed-banner {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.28);
+}
+
+.deadline-banner.missed-banner .banner-icon {
+  color: #ef4444;
+}
+
+.deadline-banner.missed-banner .banner-title {
+  color: #f87171;
+}
+
+.deadline-banner.upcoming-banner {
+  background: rgba(234, 179, 8, 0.07);
+  border-color: rgba(234, 179, 8, 0.28);
+}
+
+.deadline-banner.upcoming-banner .banner-icon {
+  color: #eab308;
+}
+
+.deadline-banner.upcoming-banner .banner-title {
+  color: #fbbf24;
+}
+
+.banner-icon-wrap {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.banner-icon-wrap .banner-icon {
+  font-size: 20px;
+}
+
+.banner-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.banner-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.banner-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.banner-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s;
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.banner-chip:hover {
+  filter: brightness(1.2);
+}
+
+.banner-chip .chip-date {
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.banner-chip.missed-chip {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
+
+.banner-chip.critical-chip {
+  background: rgba(249, 115, 22, 0.15);
+  border-color: rgba(249, 115, 22, 0.3);
+  color: #fdba74;
+}
+
+.banner-chip.soon-chip {
+  background: rgba(234, 179, 8, 0.12);
+  border-color: rgba(234, 179, 8, 0.3);
+  color: #fde68a;
+}
+
+.banner-hint {
+  font-size: 12px;
+  color: rgba(226, 232, 240, 0.5);
+  line-height: 1.5;
+}
+
+.banner-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: rgba(226, 232, 240, 0.4);
+  font-size: 15px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+.banner-close:hover {
+  color: #e2e8f0;
+}
+
+/* =============================================== */
+/* DEADLINE BADGE on individual cards */
+/* =============================================== */
+
+.deadline-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  border: 1px solid transparent;
+}
+
+.deadline-badge .deadline-badge-icon {
+  font-size: 13px;
+}
+
+.deadline-badge .deadline-badge-date {
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+.deadline-badge.badge-ok {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.25);
+  color: #86efac;
+}
+
+.deadline-badge.badge-soon {
+  background: rgba(234, 179, 8, 0.12);
+  border-color: rgba(234, 179, 8, 0.3);
+  color: #fde68a;
+}
+
+.deadline-badge.badge-critical {
+  background: rgba(249, 115, 22, 0.13);
+  border-color: rgba(249, 115, 22, 0.35);
+  color: #fdba74;
+  animation: pulseBadge 2s ease-in-out infinite;
+}
+
+.deadline-badge.badge-missed {
+  background: rgba(239, 68, 68, 0.13);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+  animation: pulseBadge 1.5s ease-in-out infinite;
+}
+
+@keyframes pulseBadge {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.65;
+  }
+}
+
+/* Card-level border tints based on urgency */
+.test-card.card-missed {
+  border-color: rgba(239, 68, 68, 0.4) !important;
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.15);
+}
+
+.test-card.card-critical {
+  border-color: rgba(249, 115, 22, 0.4) !important;
+  box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.12);
+}
+
+.test-card.card-soon {
+  border-color: rgba(234, 179, 8, 0.35) !important;
+}
+
+/* Urgent create button pulse */
+.btn-create-urgent {
+  animation: urgentPulse 2s ease-in-out infinite;
+}
+
+@keyframes urgentPulse {
+  0%, 100% {
+    box-shadow: none;
+  }
+  50% {
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.45);
+  }
+}

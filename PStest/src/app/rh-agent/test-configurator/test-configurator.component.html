@@ -1,0 +1,586 @@
+<div class="cfg-root" *ngIf="!loading">
+
+  <!-- No test yet -->
+  <div class="no-test" *ngIf="!test">
+    <span class="material-icons">quiz</span>
+    <h2>No test configured for this job</h2>
+    <p>Create a psychometric assessment to evaluate candidates.</p>
+    <button class="btn-primary" (click)="createTest()">
+      <span class="material-icons">add</span> Create Test
+    </button>
+  </div>
+
+  <!-- Main layout -->
+  <ng-container *ngIf="test">
+
+    <!-- Page header -->
+    <div class="cfg-header">
+      <div class="cfg-title-block">
+        <h1>Test Configurator</h1>
+        <p class="cfg-subtitle">{{ test.name }}</p>
+      </div>
+      <span class="status-badge" [ngClass]="test.status">
+        <span class="dot"></span>{{ test.status | uppercase }}
+      </span>
+
+      <!-- Mark as Complete button (only if draft and editable) -->
+      <button
+        class="btn-complete"
+        *ngIf="job && job.status === 'draft' && isEditable()"
+        (click)="confirmComplete()">
+        <span class="material-icons">check_circle_outline</span>
+        Mark as Complete
+      </button>
+
+      <div class="complete-badge" *ngIf="job && job.status === 'open'">
+        <span class="material-icons">check_circle</span>
+        Assessment completed
+      </div>
+    </div>
+
+    <div class="cfg-body">
+
+      <!-- Sidebar -->
+      <aside class="cfg-sidebar">
+        <div class="sidebar-meta">
+          <div class="sidebar-dept">{{ test.name }}</div>
+          <div class="sidebar-sub">{{ test.description || '' }}</div>
+          <div class="sidebar-badges">
+            <span class="badge-pill">{{ themeCount }} Themes</span>
+            <span class="badge-pill">{{ questionCount }}Q.</span>
+          </div>
+        </div>
+
+        <nav class="sidebar-nav">
+          <!-- Overview -->
+          <button class="nav-item" [class.active]="isOverview()" (click)="goOverview()">
+            <span class="material-icons">grid_view</span> Overview
+          </button>
+
+          <!-- Nested tree: Themes → Models -->
+          <div *ngFor="let theme of test.themes" class="nav-tree">
+
+            <!-- Theme row -->
+            <button
+              class="nav-item theme-nav"
+              [class.active]="currentTheme?._id === theme._id && isThemeView()"
+              (click)="goTheme(theme)">
+              <span class="material-icons">{{ categoryIcon(theme.category) }}</span>
+              <span class="nav-item-label">{{ theme.name }}</span>
+              <span class="nav-badge">{{ themeQuestionCount(theme) }}Q</span>
+            </button>
+
+            <!-- Models under theme (shown when theme is active) -->
+            <div
+              class="nav-models"
+              *ngIf="currentTheme?._id === theme._id">
+              <button
+                *ngFor="let m of theme.models"
+                class="nav-item model-nav"
+                [class.active]="currentModel?._id === m._id && isModelView()"
+                (click)="goModel(theme, m)">
+                <span class="nav-model-dot"></span>
+                <span class="nav-item-label">{{ m.label || modelLabel(m.modelType) }}</span>
+                <span class="nav-badge-sm">{{ m.questions.length }}Q</span>
+              </button>
+
+              <!-- Add model shortcut in sidebar (only if editable) -->
+              <button
+                *ngIf="isEditable()"
+                class="nav-item model-nav add-model-nav"
+                (click)="goTheme(theme); showAddModel = true">
+                <span class="material-icons" style="font-size:13px">add</span>
+                <span class="nav-item-label">Add model</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Add Theme (only if editable) -->
+          <button class="nav-item add-theme-nav" (click)="goAddTheme()" *ngIf="isEditable()">
+            <span class="material-icons">add_circle_outline</span> Add Theme
+          </button>
+        </nav>
+      </aside>
+
+      <!-- Content panel -->
+      <main class="cfg-content">
+
+        <!-- OVERVIEW -->
+        <div *ngIf="isOverview()" class="panel-overview">
+          <h2 class="panel-title">Test Overview</h2>
+          <p class="panel-desc">A summary of all themes and their configurations.</p>
+
+          <div *ngFor="let theme of test.themes" class="overview-card">
+            <div class="ov-card-head">
+              <div class="ov-icon-wrap">
+                <span class="material-icons">{{ categoryIcon(theme.category) }}</span>
+              </div>
+              <div class="ov-title-block">
+                <div class="ov-name">{{ theme.name }}</div>
+                <div class="ov-cat">{{ categoryLabel(theme.category) | uppercase }}</div>
+              </div>
+              <button class="btn-ghost" (click)="goTheme(theme)" *ngIf="isEditable()">
+                <span class="material-icons">settings</span> Configure
+              </button>
+              <button class="btn-icon-danger" (click)="deleteTheme(theme._id!)" *ngIf="isEditable()">
+                <span class="material-icons">delete</span>
+              </button>
+            </div>
+            <div class="ov-models">
+              <span *ngFor="let m of theme.models" class="model-chip">
+                {{ m.label || modelLabel(m.modelType) }}
+                <span class="chip-w">{{ m.weight }}%</span>
+                <span class="chip-q">· {{ m.questions.length }}Q</span>
+              </span>
+              <span *ngIf="!theme.models.length" class="no-models-hint">No models yet</span>
+            </div>
+          </div>
+
+          <div *ngIf="!test.themes.length" class="empty-state">
+            <span class="material-icons">layers</span>
+            <p>No themes yet. <button class="link-btn" (click)="goAddTheme()">Add a theme</button> to get started.</p>
+          </div>
+        </div>
+
+        <!-- ADD THEME -->
+        <div *ngIf="isAddTheme()" class="panel-form">
+          <button class="back-btn" (click)="goOverview()">
+            <span class="material-icons">arrow_back</span>
+          </button>
+          <h2 class="panel-title">Add a Theme</h2>
+          <p class="panel-desc">Group questions by evaluation category</p>
+
+          <div class="form-section">
+            <label class="form-label">THEME NAME *</label>
+            <input class="form-input" [(ngModel)]="newThemeName"
+                   placeholder="e.g. Personality Profile" />
+          </div>
+
+          <div class="form-section">
+            <label class="form-label">CATEGORY *</label>
+            <div class="cat-grid">
+              <button *ngFor="let cat of categories"
+                      class="cat-btn" [class.selected]="newThemeCategory === cat"
+                      (click)="newThemeCategory = cat">
+                <span class="material-icons">{{ CATEGORY_META[cat].icon }}</span>
+                {{ CATEGORY_META[cat].label }}
+              </button>
+            </div>
+          </div>
+
+          <button class="btn-primary full-width" (click)="submitAddTheme()"
+                  [disabled]="!newThemeName">
+            <span class="material-icons">add</span> Create Theme &amp; Configure
+          </button>
+        </div>
+
+        <!-- THEME VIEW (model list) -->
+        <div *ngIf="isThemeView() && currentTheme" class="panel-theme">
+
+          <div class="theme-header">
+            <div class="theme-title-row">
+              <span class="material-icons theme-icon">{{ categoryIcon(currentTheme.category) }}</span>
+              <div>
+                <h2 class="panel-title">{{ currentTheme.name }}</h2>
+                <div class="theme-cat-label">{{ categoryLabel(currentTheme.category) | uppercase }}</div>
+              </div>
+            </div>
+            <button class="btn-danger-ghost" (click)="deleteTheme(currentTheme._id!)" *ngIf="isEditable()">
+              <span class="material-icons">delete</span> Delete Theme
+            </button>
+          </div>
+
+          <div class="models-layout">
+
+            <!-- Model list column -->
+            <div class="models-list-col">
+              <div class="models-label">MODELS</div>
+
+              <button *ngFor="let m of currentTheme.models"
+                      class="model-item" [class.active]="currentModel?._id === m._id"
+                      (click)="goModel(currentTheme, m)">
+                <div class="model-item-name">{{ m.label || modelLabel(m.modelType) }}</div>
+                <div class="model-item-meta">{{ m.weight }}% · {{ m.questions.length }}Q</div>
+              </button>
+
+              <!-- Add model button / inline form (only if editable) -->
+              <button class="model-add-btn" *ngIf="!showAddModel && isEditable()" (click)="showAddModel=true">
+                <span class="material-icons">add_circle_outline</span> Add Model
+              </button>
+
+              <div class="add-model-form" *ngIf="showAddModel && isEditable()">
+                <div class="form-mini-label">SELECT MODEL</div>
+
+                <!-- Standard model select (non-custom) -->
+                <select class="form-select" [(ngModel)]="newModelType"
+                        *ngIf="newModelType !== 'custom'">
+                  <option *ngFor="let mt of modelTypes" [value]="mt"
+                          [disabled]="mt === 'custom'">
+                    {{ modelLabel(mt) }}
+                  </option>
+                </select>
+
+                <!-- Custom model label shown when custom is active -->
+                <div class="custom-model-active" *ngIf="newModelType === 'custom'">
+                  <span class="material-icons" style="font-size:15px;color:#a78bfa">tune</span>
+                  Custom Model
+                  <button class="link-btn" style="margin-left:auto;font-size:11px"
+                          (click)="newModelType = 'disc'">
+                    ← back to list
+                  </button>
+                </div>
+
+                <!-- "Create custom model" link outside select -->
+                <button class="create-custom-link" *ngIf="newModelType !== 'custom'"
+                        (click)="newModelType = 'custom'">
+                  <span class="material-icons" style="font-size:13px">add_circle_outline</span>
+                  Create custom model instead
+                </button>
+
+                <div class="form-mini-label" style="margin-top:8px">
+                  WEIGHT <span class="weight-val">{{ newModelWeight }}%</span>
+                </div>
+                <input type="range" min="0" max="100" [(ngModel)]="newModelWeight" class="slider" />
+
+                <ng-container *ngIf="newModelType === 'custom'">
+                  <div class="form-mini-label">MODEL NAME</div>
+                  <input class="form-input" [(ngModel)]="newModelCustomLabel"
+                         placeholder="Custom model name" />
+                  <div class="form-mini-label">CRITERIA</div>
+                  <div *ngFor="let cr of newCustomCriteria; let i=index" class="criterion-row">
+                    <input class="form-input sm" [(ngModel)]="cr.key" placeholder="key" />
+                    <input class="form-input sm" [(ngModel)]="cr.label" placeholder="Label" />
+                    <input type="color" [(ngModel)]="cr.color" class="color-pick" />
+                    <button class="icon-btn" (click)="removeCriterion(i)">
+                      <span class="material-icons">remove</span>
+                    </button>
+                  </div>
+                  <button class="link-btn" (click)="addCriterion()">+ Add Criterion</button>
+                </ng-container>
+
+                <div class="add-model-actions">
+                  <button class="btn-ghost sm" (click)="showAddModel=false">Cancel</button>
+                  <button class="btn-primary sm" (click)="submitAddModel(currentTheme)">Add</button>
+                </div>
+              </div>
+
+              <div class="total-weight">
+                <span>TOTAL WEIGHT</span>
+                <span>{{ totalWeight(currentTheme) }}%</span>
+                <div class="weight-bar">
+                  <div class="weight-fill" [style.width.%]="totalWeight(currentTheme)"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: select model hint (when no model selected) -->
+            <div class="model-content-area" *ngIf="isThemeView()">
+              <span class="material-icons big-icon">view_module</span>
+              <p>Select a model to manage its questions</p>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- MODEL VIEW (questions) -->
+        <div *ngIf="isModelView() && currentTheme && currentModel" class="panel-model">
+
+          <!-- Model header -->
+          <div class="model-header">
+            <div class="model-title-row">
+              <div class="model-icon-wrap">
+                <span class="material-icons">psychology</span>
+              </div>
+              <div>
+                <h2 class="panel-title">{{ currentModel.label || modelLabel(currentModel.modelType) }}</h2>
+                <div class="model-type-badge">{{ currentModel.modelType | uppercase }}</div>
+              </div>
+            </div>
+
+            <div class="model-criteria">
+              <span
+                *ngFor="let cr of criteriaFor(currentModel)"
+                class="criterion-chip"
+                [style.background]="cr.color + '22'"
+                [style.color]="cr.color"
+                [style.border]="'1px solid ' + cr.color + '44'">
+                <span class="criterion-dot" [style.background]="cr.color"></span>
+                {{ cr.key }}: {{ cr.label }}
+              </span>
+            </div>
+
+            <div class="model-weight-edit">
+              <span class="weight-label">WEIGHT</span>
+              <input
+                type="number"
+                class="weight-input"
+                [value]="currentModel.weight"
+                (change)="updateModelWeight(currentTheme, currentModel, +$any($event.target).value)"
+                [disabled]="!isEditable()" />
+              <span class="weight-pct">%</span>
+              <button class="btn-icon-danger" (click)="deleteModel(currentTheme, currentModel._id!)" *ngIf="isEditable()">
+                <span class="material-icons">delete</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Question editor -->
+          <div class="question-editor" *ngIf="editingQuestion">
+
+            <div class="editor-heading">
+              <span class="material-icons editor-heading-icon">
+                {{ editingQuestionId ? 'edit' : 'add_circle_outline' }}
+              </span>
+              <h3>{{ editingQuestionId ? 'Edit' : 'New' }} Question</h3>
+            </div>
+
+            <!-- Question text -->
+            <div class="form-section">
+              <label class="form-label">QUESTION TEXT *</label>
+              <textarea
+                class="form-textarea"
+                [(ngModel)]="editingQuestion.text"
+                placeholder="Type the behavioral or psychometric stimulus question...">
+              </textarea>
+            </div>
+
+            <!-- Answer type -->
+            <div class="form-section">
+              <label class="form-label">ANSWER TYPE</label>
+              <div class="answer-type-grid">
+                <button
+                  *ngFor="let at of answerTypes"
+                  class="at-btn"
+                  [class.selected]="editingQuestion.answerType === at"
+                  (click)="editingQuestion.answerType = at">
+                  <span class="material-icons at-icon">{{ ANSWER_TYPE_META[at].icon }}</span>
+                  <span class="at-label">{{ ANSWER_TYPE_META[at].label }}</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- LIKERT -->
+            <ng-container *ngIf="editingQuestion.answerType === 'likert'">
+              <div class="likert-poles">
+                <div class="form-section">
+                  <label class="form-label">MIN LABEL</label>
+                  <input class="form-input" [(ngModel)]="editingQuestion.likertMin"
+                         placeholder="Strongly Disagree" />
+                </div>
+                <div class="form-section">
+                  <label class="form-label">MAX LABEL</label>
+                  <input class="form-input" [(ngModel)]="editingQuestion.likertMax"
+                         placeholder="Strongly Agree" />
+                </div>
+              </div>
+
+              <div class="form-section">
+                <label class="form-label">ASSOCIATED CRITERION</label>
+                <select class="form-select" [(ngModel)]="editingQuestion.likertCriterionKey">
+                  <option [ngValue]="null">— Select a criterion —</option>
+                  <option *ngFor="let cr of criteriaFor(currentModel)" [value]="cr.key">
+                    {{ cr.label }} ({{ cr.key }})
+                  </option>
+                </select>
+                <p class="field-hint">The score will be integrated into the average of the criterion above.</p>
+              </div>
+
+              <div class="form-section checkbox-row">
+                <label class="checkbox-label">
+                  <input type="checkbox" [(ngModel)]="editingQuestion.likertReversed" />
+                  <span>Reversed question (higher score = weaker trait)</span>
+                </label>
+                <p class="field-hint">
+                  Example: "I avoid new experiences" → 5/5 = low Openness.
+                </p>
+              </div>
+
+              <div class="likert-preview">
+                <span class="likert-min-label">{{ editingQuestion.likertMin || 'Strongly Disagree' }}</span>
+                <div class="likert-scale">
+                  <div *ngFor="let n of [1,2,3,4,5]" class="likert-step">
+                    <div class="likert-circle">{{ n }}</div>
+                  </div>
+                </div>
+                <span class="likert-max-label">{{ editingQuestion.likertMax || 'Strongly Agree' }}</span>
+              </div>
+            </ng-container>
+
+            <!-- SINGLE CHOICE & MULTIPLE CHOICE -->
+            <ng-container *ngIf="editingQuestion.answerType === 'single_choice'
+                               || editingQuestion.answerType === 'multiple_choice'">
+
+              <!-- Question-level criterion selector -->
+              <div class="form-section">
+                <label class="form-label">CRITERION FOR THIS QUESTION</label>
+                <select class="form-select" [(ngModel)]="editingQuestion.questionCriterionKey">
+                  <option [ngValue]="null">— Select a criterion —</option>
+                  <option *ngFor="let cr of criteriaFor(currentModel)" [value]="cr.key">
+                    {{ cr.label }} ({{ cr.key }})
+                  </option>
+                </select>
+                <p class="field-hint">
+                  All options share this criterion. Each option contributes a different score toward it.
+                </p>
+              </div>
+
+              <!-- Options table: text + score only (no per-option criterion) -->
+              <div class="form-section">
+                <label class="form-label">RESPONSE OPTIONS &amp; SCORING</label>
+
+                <div class="options-table-wrap">
+                  <table class="options-table">
+                    <thead>
+                      <tr>
+                        <th class="col-text">Option text</th>
+                        <th class="col-score">Score</th>
+                        <th class="col-del"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <!-- Existing options -->
+                      <tr *ngFor="let opt of editingQuestion.options; let i = index" class="opt-row">
+                        <td>
+                          <input class="tbl-input flex" [(ngModel)]="opt.text"
+                                 placeholder="Option text" />
+                        </td>
+                        <td>
+                          <input type="number" class="tbl-input score"
+                                 [(ngModel)]="opt.score" placeholder="0" />
+                        </td>
+                        <td>
+                          <button class="opt-del-btn" (click)="removeOption(i)">
+                            <span class="material-icons">remove_circle_outline</span>
+                          </button>
+                        </td>
+                      </tr>
+
+                      <!-- New option row -->
+                      <tr class="opt-row new-opt-row">
+                        <td>
+                          <input class="tbl-input flex" [(ngModel)]="newOption.text"
+                                 placeholder="New option text..." />
+                        </td>
+                        <td>
+                          <input type="number" class="tbl-input score"
+                                 [(ngModel)]="newOption.score" placeholder="0" />
+                        </td>
+                        <td>
+                          <button class="btn-add-opt" (click)="addOption()">
+                            <span class="material-icons">add</span>
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </ng-container>
+
+            <!-- Editor actions -->
+            <div class="question-actions">
+              <button class="btn-ghost" (click)="cancelQuestion()">Cancel</button>
+              <button class="btn-primary" (click)="saveQuestion(currentTheme, currentModel)">
+                <span class="material-icons">{{ editingQuestionId ? 'save' : 'add' }}</span>
+                {{ editingQuestionId ? 'Update' : 'Add' }} Question
+              </button>
+            </div>
+          </div>
+
+          <!-- Questions list -->
+          <ng-container *ngIf="!editingQuestion">
+
+            <!-- Empty state -->
+            <div *ngIf="!currentModel.questions.length" class="no-questions">
+              <span class="material-icons no-q-icon">help_outline</span>
+              <p class="no-q-text">No questions yet</p>
+              <p class="no-q-sub">Add your first question to this model.</p>
+            </div>
+
+            <!-- Question cards -->
+            <div *ngFor="let q of currentModel.questions; let i = index" class="question-card">
+              <div class="q-num">Q{{ i + 1 }}</div>
+
+              <div class="q-body">
+                <div class="q-text">{{ q.text }}</div>
+                <div class="q-meta">
+                  <span class="q-type-badge">
+                    <span class="material-icons q-type-icon">
+                      {{ ANSWER_TYPE_META[q.answerType]?.icon }}
+                    </span>
+                    {{ ANSWER_TYPE_META[q.answerType]?.label }}
+                  </span>
+                  <span class="q-opts-count" *ngIf="q.answerType !== 'likert'">
+                    {{ q.options.length }} option{{ q.options.length !== 1 ? 's' : '' }}
+                  </span>
+                  <span class="q-opts-count" *ngIf="q.answerType === 'likert'">Scale 1–5</span>
+
+                  <!-- Show the shared criterion for single/multiple choice -->
+                  <span class="q-criterion-badge"
+                        *ngIf="(q.answerType === 'single_choice' || q.answerType === 'multiple_choice')
+                               && q.options.length && q.options[0].criterionKey">
+                    <span class="material-icons" style="font-size:12px">label</span>
+                    {{ q.options[0].criterionKey }}
+                  </span>
+                </div>
+
+                <div class="q-opts-preview"
+                     *ngIf="q.answerType !== 'likert' && q.options.length">
+                  <span *ngFor="let o of q.options.slice(0,3)" class="opt-preview-chip">
+                    {{ o.text }}
+                    <span class="opt-preview-score" *ngIf="o.score">+{{ o.score }}</span>
+                  </span>
+                  <span class="opt-preview-more" *ngIf="q.options.length > 3">
+                    +{{ q.options.length - 3 }} more
+                  </span>
+                </div>
+              </div>
+
+              <div class="q-actions">
+                <button class="q-action-btn"
+                        *ngIf="isEditable()"
+                        (click)="openEditQuestion(currentTheme, currentModel, q)"
+                        title="Edit question">
+                  <span class="material-icons">edit</span>
+                </button>
+                <button class="q-action-btn danger"
+                        *ngIf="isEditable()"
+                        (click)="deleteQuestion(currentTheme, currentModel, q._id!)"
+                        title="Delete question">
+                  <span class="material-icons">delete</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Add question button (only if editable) -->
+            <button class="btn-add-question" *ngIf="isEditable()"
+                    (click)="openNewQuestion(currentTheme, currentModel)">
+              <span class="material-icons">add_circle_outline</span> Add Question
+            </button>
+
+          </ng-container>
+        </div>
+
+      </main>
+    </div>
+  </ng-container>
+</div>
+
+<!-- Modal de confirmation pour "Mark as Complete" -->
+<div class="modal-overlay" *ngIf="showCompleteModal">
+  <div class="modal-container">
+    <div class="modal-header">
+      <span class="material-icons">info</span>
+      <h3>Confirm completion</h3>
+    </div>
+    <div class="modal-body">
+      <p>The test will be sent to the responsible person.</p>
+      <p>They will inform you if any modifications are needed.</p>
+      <p><strong>You will no longer be able to add or modify any part of the test until the responsible person requests changes.</strong></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" (click)="cancelComplete()">Cancel</button>
+      <button class="btn-primary" (click)="completeTestConfirmed()">Confirm & Send</button>
+    </div>
+  </div>
+</div>

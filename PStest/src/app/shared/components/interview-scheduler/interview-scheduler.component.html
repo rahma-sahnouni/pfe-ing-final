@@ -1,0 +1,843 @@
+<!-- interview-scheduler.component.html -->
+<div class="scheduler-root">
+
+  <!-- ══════════════════════ HEADER ══════════════════════ -->
+  <div class="page-header">
+
+    <div class="page-header-left">
+      <button class="back-btn" *ngIf="selectedJobObj" (click)="backToJobs()">
+        <i class="fa-solid fa-arrow-left"></i>
+      </button>
+      <div class="header-title-group">
+        <h1 class="page-title">
+          <i class="fa-solid fa-calendar-check"></i>
+          <span *ngIf="!selectedJobObj">Interview Scheduler</span>
+          <span *ngIf="selectedJobObj">{{ selectedJobObj.title }}</span>
+        </h1>
+        <div class="header-pills" *ngIf="selectedJobObj">
+          <span class="pill pill-ready">{{ readyCandidates.length }} candidates</span>
+          <span class="pill pill-rh" *ngIf="!isTech">
+            <i class="fa-solid fa-user-tie"></i> RH: {{ scheduledCount('rh') }} scheduled
+          </span>
+          <span class="pill pill-tech" *ngIf="!isRH">
+            <i class="fa-solid fa-laptop-code"></i> Tech: {{ scheduledCount('technical evaluator') }} scheduled
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Role badge -->
+    <div class="role-badge" [ngClass]="'role-' + currentRole">
+      <i class="fa-solid"
+         [class.fa-user-tie]="isRH"
+         [class.fa-laptop-code]="isTech"
+         [class.fa-shield-halved]="isAdmin"></i>
+      {{ isRH ? 'RH' : isTech ? 'Technical Evaluator' : 'Admin' }}
+    </div>
+
+    <button class="btn-icon-round" (click)="loadJobs()" title="Refresh">
+      <i class="fa-solid fa-arrows-rotate"></i>
+    </button>
+  </div>
+
+  <div class="loading-overlay" *ngIf="loading">
+    <div class="spinner"></div><span>Loading…</span>
+  </div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     VIEW: JOB LIST (avec badges de délai)
+══════════════════════════════════════════════════════════════ -->
+<div class="view-panel" *ngIf="!loading && !selectedJobObj">
+  <!-- Bannières de délai (missed / upcoming) -->
+  <div class="deadline-banner missed-banner"
+       *ngIf="showMissedInterviewsBanner && missedInterviewsJobs.length">
+    <div class="banner-icon-wrap">
+      <span class="material-icons banner-icon">warning</span>
+    </div>
+    <div class="banner-body">
+      <div class="banner-title">
+        {{ missedInterviewsJobs.length }} missed interview deadline{{ missedInterviewsJobs.length !== 1 ? 's' : '' }}
+      </div>
+      <div class="banner-list">
+        <span class="banner-chip missed-chip"
+              *ngFor="let job of missedInterviewsJobs"
+              (click)="selectJob(job)">
+          <span class="material-icons" style="font-size:13px">error_outline</span>
+          {{ job.title }}
+          <span class="chip-date">· {{ interviewDeadlineDate(job) }}</span>
+        </span>
+      </div>
+      <div class="banner-hint">
+        These jobs have passed their interview‑setup deadline. Configure interview slots now.
+      </div>
+    </div>
+    <button class="banner-close" (click)="showMissedInterviewsBanner = false">✕</button>
+  </div>
+
+  <div class="deadline-banner upcoming-banner"
+       *ngIf="showUpcomingInterviewsBanner && upcomingInterviewsJobs.length">
+    <div class="banner-icon-wrap">
+      <span class="material-icons banner-icon">schedule</span>
+    </div>
+    <div class="banner-body">
+      <div class="banner-title">
+        Upcoming interview deadline{{ upcomingInterviewsJobs.length !== 1 ? 's' : '' }}
+      </div>
+      <div class="banner-list">
+        <span class="banner-chip"
+              *ngFor="let job of upcomingInterviewsJobs"
+              (click)="selectJob(job)">
+          <span class="material-icons" style="font-size:13px">timelapse</span>
+          {{ job.title }}
+          <span class="chip-date">· {{ interviewDeadlineLabel(job) }}</span>
+        </span>
+      </div>
+      <div class="banner-hint">
+        Interview slots must be configured before the deadline to keep the pipeline moving.
+      </div>
+    </div>
+    <button class="banner-close" (click)="showUpcomingInterviewsBanner = false">✕</button>
+  </div>
+
+  <!-- Jobs grid -->
+  <div class="jobs-intro">
+    <p class="intro-text">Select a position to manage its interview pipeline.</p>
+  </div>
+  <div class="jobs-grid" *ngIf="jobs.length">
+    <div class="job-card" 
+         *ngFor="let job of jobs"
+         (click)="selectJob(job)"
+         [class.card-missed]="getInterviewDeadlineUrgency(job) === 'missed'"
+         [class.card-critical]="getInterviewDeadlineUrgency(job) === 'critical'"
+         [class.card-soon]="getInterviewDeadlineUrgency(job) === 'soon'">
+
+      <div class="job-card-header">
+        <div class="job-dept-badge">{{ job.department || '—' }}</div>
+        <div class="job-status-indicator" [ngClass]="'status-' + (job.status || 'draft')">
+          {{ job.status || 'draft' }}
+        </div>
+      </div>
+
+      <h3 class="job-card-title">{{ job.title }}</h3>
+
+      <!-- Badge de délai d'entretien -->
+      <div class="deadline-badge" 
+           *ngIf="!hasInterviewsConfigured(job) && getInterviewDeadlineUrgency(job)"
+           [ngClass]="'badge-' + getInterviewDeadlineUrgency(job)">
+        <span class="material-icons deadline-badge-icon">
+          {{ getInterviewDeadlineUrgency(job) === 'missed' ? 'warning' : 'schedule' }}
+        </span>
+        <span class="deadline-badge-text">{{ interviewDeadlineLabel(job) }}</span>
+        <span class="deadline-badge-date">· {{ interviewDeadlineDate(job) }}</span>
+      </div>
+
+      <div class="job-card-meta">
+        <span *ngIf="job.location"><i class="fa-solid fa-location-dot"></i> {{ job.location }}</span>
+        <span *ngIf="job.contractType"><i class="fa-solid fa-briefcase"></i> {{ job.contractType }}</span>
+      </div>
+
+      <div class="job-card-footer">
+        <div class="job-interview-status" *ngIf="!isTech">
+          <span class="interview-badge configured" *ngIf="job.interviewConfig?.rh?.ranges?.length">
+            <i class="fa-solid fa-check"></i> RH configured
+          </span>
+          <span class="interview-badge not-configured" *ngIf="!job.interviewConfig?.rh?.ranges?.length">
+            <i class="fa-solid fa-gear"></i> RH to configure
+          </span>
+        </div>
+        <div class="job-interview-status" *ngIf="!isRH">
+          <span class="interview-badge configured tech-badge" *ngIf="job.interviewConfig?.tech?.ranges?.length">
+            <i class="fa-solid fa-check"></i> Tech configured
+          </span>
+          <span class="interview-badge not-configured" *ngIf="!job.interviewConfig?.tech?.ranges?.length">
+            <i class="fa-solid fa-gear"></i> Tech to configure
+          </span>
+        </div>
+        <div class="job-apps-count" *ngIf="job.applicationsCount">
+          <i class="fa-solid fa-users"></i> {{ job.applicationsCount }}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="empty-state" *ngIf="!jobs.length">
+    <div class="empty-icon">📋</div>
+    <h3>No positions available</h3>
+    <p>You haven't created any positions yet or none are active.</p>
+  </div>
+</div>
+  <!-- ══════════════════════════════════════════════════════════════
+       JOB DETAIL: TAB BAR
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="tab-bar" *ngIf="!loading && selectedJobObj && activeView !== 'live'">
+    <button class="tab" [class.active]="activeView==='jobs'" (click)="setView('jobs')">
+      <i class="fa-solid fa-sliders"></i> Configuration
+    </button>
+    <button class="tab" [class.active]="activeView==='calendar'" (click)="setView('calendar')">
+      <i class="fa-solid fa-calendar-days"></i> Calendar
+      <span class="tab-count" *ngIf="allSessions.length">{{ allSessions.length }}</span>
+    </button>
+    <button class="tab" *ngIf="isAdmin"
+      [class.active]="activeView==='admin-decisions'"
+      (click)="setView('admin-decisions')">
+      <i class="fa-solid fa-gavel"></i> Final Decisions
+      <span class="tab-count urgent" *ngIf="pendingDecisionCount()">{{ pendingDecisionCount() }}</span>
+    </button>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       JOB DETAIL: CONFIGURATION VIEW
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="view-panel config-view" *ngIf="!loading && selectedJobObj && activeView==='jobs'">
+
+    <div class="stage-context-banner" [ngClass]="'stage-banner-' + myStage">
+      <div class="context-icon">
+        <i class="fa-solid"
+           [class.fa-user-tie]="isRH || isAdmin"
+           [class.fa-laptop-code]="isTech"></i>
+        <span *ngIf="isRH">You are configuring the <strong>RH interview</strong> stage.</span>
+        <span *ngIf="isTech">You are configuring the <strong>Tech interview</strong> stage.</span>
+        <span *ngIf="isAdmin">
+          Admin view — you can configure both stages.
+          Currently editing: <strong>{{ adminEditingStage.toUpperCase() }}</strong>
+        </span>
+      </div>
+
+      <button class="btn-danger" (click)="deleteStageConfiguration(myStage)" [disabled]="loading">
+        <i class="fa-solid fa-trash-can"></i> Delete all
+      </button>
+
+      <div class="admin-stage-switch" *ngIf="isAdmin">
+        <button
+          [class.active]="adminEditingStage === 'rh'"
+          (click)="adminEditingStage = 'rh'">
+          RH
+        </button>
+        <button
+          [class.active]="adminEditingStage === 'technical evaluator'"
+          (click)="adminEditingStage = 'technical evaluator'">
+          Tech
+        </button>
+      </div>
+    </div>
+
+    <div class="config-columns">
+      <div class="config-col">
+        <div class="plan-card">
+          <div class="plan-card-header">
+            <span class="step-badge">1</span>
+            <span class="step-label">{{ myStage === 'rh' ? '👔 RH' : '💻 Tech' }} Interview slots</span>
+            <button class="btn-save-config" (click)="saveConfig()" [disabled]="savingConfig">
+              <i class="fa-solid fa-floppy-disk"></i> {{ savingConfig ? 'Saving…' : 'Save' }}
+            </button>
+          </div>
+          <div class="plan-card-body">
+            <form [formGroup]="dayForm" (ngSubmit)="addDay()" class="day-form">
+              <div class="fg"><label>Date</label><input type="date" formControlName="date" class="fi" /></div>
+              <div class="fg"><label>Start</label><input type="time" formControlName="startTime" class="fi" /></div>
+              <div class="fg"><label>End</label><input type="time" formControlName="endTime" class="fi" /></div>
+              <div class="fg fg-sm"><label>Duration</label><input type="number" formControlName="durationMinutes" class="fi" min="15" step="5" /></div>
+              <div class="fg fg-sm"><label>Break</label><input type="number" formControlName="breakMinutes" class="fi" min="0" step="5" /></div>
+              <div class="fg fg-btn"><label>&nbsp;</label><button type="submit" class="btn-add-day" [disabled]="dayForm.invalid"><i class="fa-solid fa-plus"></i></button></div>
+            </form>
+
+            <div class="day-list" *ngIf="myConfig.ranges.length">
+              <div class="day-item" *ngFor="let r of myConfig.ranges; let i = index">
+                <div class="day-item-icon">📅</div>
+                <div class="day-info">
+                  <strong>{{ formatDate(r.date) }}</strong>
+                  <span class="day-meta">{{ r.startTime }} → {{ r.endTime }} · {{ r.durationMinutes }}min · {{ computeSlotCount(r) }} slots</span>
+                </div>
+                <button class="btn-del" (click)="removeDay(i)"><i class="fa-solid fa-xmark"></i></button>
+              </div>
+              <div class="total-slots-row">
+                <i class="fa-solid fa-calendar-check"></i>
+                <strong>{{ totalSlots }}</strong> slots for <strong>{{ readyCandidates.length }}</strong> candidates
+              </div>
+            </div>
+            <div class="empty-hint" *ngIf="!myConfig.ranges.length">Add at least one day to configure interviews.</div>
+          </div>
+        </div>
+
+        <div class="plan-card">
+          <div class="plan-card-header">
+            <span class="step-badge">2</span>
+            <span class="step-label">Candidates</span>
+            <button class="btn-assign" (click)="autoAssign()" [disabled]="!myConfig.ranges.length || !filteredCandidates.length || assigning">
+              <span *ngIf="!assigning"><i class="fa-solid fa-wand-magic-sparkles"></i> Auto-assign</span>
+              <span *ngIf="assigning"><i class="fa-solid fa-spinner fa-spin"></i></span>
+            </button>
+          </div>
+          <div class="success-banner" *ngIf="assignmentDone">
+            <i class="fa-solid fa-circle-check"></i>
+            <strong>{{ assignmentCount }}</strong> candidate(s) automatically assigned.
+          </div>
+          <div class="search-wrap" *ngIf="readyCandidates.length">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" placeholder="Search…" [value]="searchQuery" (input)="onSearch($any($event.target).value)" />
+          </div>
+          <div class="empty-state-sm" *ngIf="!filteredCandidates.length">
+            <i class="fa-solid fa-user-check"></i>
+            <p>No eligible candidates for this stage.</p>
+          </div>
+          <div class="cand-list" *ngIf="filteredCandidates.length">
+            <div class="cand-item" *ngFor="let c of filteredCandidates">
+              <div class="avatar" [style.background]="c.avatarColor || 'linear-gradient(135deg,#4f6ef7,#7c3aed)'">
+                {{ getInitials(c.name) }}
+              </div>
+              <div class="cand-info">
+                <div class="cand-name">{{ c.name }}</div>
+                <div class="cand-email">{{ c.email }}</div>
+                <div class="cand-tags">
+                  <span class="tag tag-rh" *ngIf="c.rhApproved === 'approved'"><i class="fa-solid fa-check"></i> HR ✓</span>
+                  <span class="tag tag-tech" *ngIf="c.techStatus === 'approved'"><i class="fa-solid fa-check"></i> Tech ✓</span>
+                  <span class="tag tag-score" *ngIf="c.aiMatchScore != null">{{ c.aiMatchScore | number:'1.0-0' }}%</span>
+                </div>
+              </div>
+              <div class="cand-right">
+                <div class="interview-slot-row">
+                  <span class="slot-stage-label rh-label">👔 RH</span>
+                  <div class="schedule-badge" [class.badge-scheduled]="isScheduled(c, 'rh')" [class.badge-pending]="!isScheduled(c, 'rh')">
+                    <i class="fa-solid" [class.fa-clock]="isScheduled(c, 'rh')" [class.fa-regular]="!isScheduled(c, 'rh')"></i>
+                    {{ isScheduled(c, 'rh') ? formatDateTime(c.interviews?.rh?.scheduledAt) : 'Pending' }}
+                  </div>
+                  <button class="btn-schedule-sm" *ngIf="canManageStage('rh')" (click)="openSchedule(c, 'rh')">
+                    <i class="fa-solid fa-calendar-plus"></i> {{ isScheduled(c, 'rh') ? 'Edit' : 'Schedule' }}
+                  </button>
+                </div>
+                <div class="interview-slot-row">
+                  <span class="slot-stage-label tech-label">💻 Tech</span>
+                  <div class="schedule-badge" [class.badge-scheduled]="isScheduled(c, 'technical evaluator')" [class.badge-pending]="!isScheduled(c, 'technical evaluator')">
+                    <i class="fa-solid" [class.fa-clock]="isScheduled(c, 'technical evaluator')" [class.fa-regular]="!isScheduled(c, 'technical evaluator')"></i>
+                    {{ isScheduled(c, 'technical evaluator') ? formatDateTime(c.interviews?.tech?.scheduledAt) : 'Pending' }}
+                  </div>
+                  <button class="btn-schedule-sm tech-btn" *ngIf="canManageStage('technical evaluator')" (click)="openSchedule(c, 'technical evaluator')">
+                    <i class="fa-solid fa-calendar-plus"></i> {{ isScheduled(c, 'technical evaluator') ? 'Edit' : 'Schedule' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-col">
+        <div class="plan-card">
+          <div class="plan-card-header">
+            <span class="step-badge"><i class="fa-solid fa-table-list"></i></span>
+            <span class="step-label">{{ myStage === 'rh' ? '👔 RH' : '💻 Tech' }} Evaluation grid</span>
+            <button class="btn-save-config" (click)="saveConfig()" [disabled]="savingConfig">
+              <i class="fa-solid fa-floppy-disk"></i> {{ savingConfig ? '…' : 'Save' }}
+            </button>
+          </div>
+          <div class="plan-card-body">
+            <form [formGroup]="criterionForm" (ngSubmit)="addCriterion()" class="criterion-form">
+              <div class="fg" style="flex:2"><label>Criterion *</label><input type="text" formControlName="label" class="fi" placeholder="Ex: Communication…" /></div>
+              <div class="fg" style="flex:2"><label>Description</label><input type="text" formControlName="description" class="fi" placeholder="Optional" /></div>
+              <div class="fg"><label>Type</label>
+                <select formControlName="type" class="fi">
+                  <option value="rating_5">Score /5</option>
+                  <option value="rating_10">Score /10</option>
+                  <option value="yes_no">Yes / No</option>
+                  <option value="text">Free text</option>
+                </select>
+              </div>
+              <div class="fg fg-sm"><label>Weight</label><input type="number" formControlName="weight" class="fi" min="0" step="0.5" /></div>
+              <div class="fg fg-btn">
+                <label>&nbsp;</label>
+                <button type="submit" class="btn-add-day" [disabled]="criterionForm.invalid">
+                  <i class="fa-solid {{ editingCriterionIndex !== null ? 'fa-check' : 'fa-plus' }}"></i>
+                </button>
+                <button type="button" class="btn-cancel-edit" *ngIf="editingCriterionIndex !== null" (click)="cancelEditCriterion()">
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+            </form>
+
+            <div class="criterion-list" *ngIf="myConfig.evaluationGrid.length">
+              <div class="criterion-item" *ngFor="let c of myConfig.evaluationGrid; let i = index">
+                <div class="criterion-num">{{ i + 1 }}</div>
+                <div class="criterion-body">
+                  <div class="criterion-label">{{ c.label }}</div>
+                  <div class="criterion-desc" *ngIf="c.description">{{ c.description }}</div>
+                </div>
+                <span class="criterion-type-pill">{{ criterionTypeLabel(c.type) }}</span>
+                <span class="criterion-weight">×{{ c.weight }}</span>
+                <div class="criterion-actions">
+                  <button class="btn-icon-xs" (click)="editCriterion(i)"><i class="fa-solid fa-pen"></i></button>
+                  <button class="btn-icon-xs danger" (click)="removeCriterion(i)"><i class="fa-solid fa-trash"></i></button>
+                </div>
+              </div>
+            </div>
+            <div class="empty-hint" *ngIf="!myConfig.evaluationGrid.length">
+              <i class="fa-solid fa-list-check"></i>Add the criteria for the {{ myStage.toUpperCase() }} evaluation.
+            </div>
+          </div>
+        </div>
+
+        <!-- Read-only opposite stage grid for non-admin users -->
+        <div class="plan-card readonly-card" *ngIf="!isAdmin">
+          <div class="plan-card-header readonly-header">
+            <i class="fa-solid fa-eye"></i>
+            <span class="step-label">
+              {{ myStage === 'rh' ? '💻 Tech' : '👔 RH' }} Evaluation grid
+              <span class="readonly-badge">Read only</span>
+            </span>
+          </div>
+          <div class="plan-card-body">
+            <div class="criterion-list" *ngIf="(myStage==='rh' ? techConfig : rhConfig).evaluationGrid.length">
+              <div class="criterion-item readonly-item" *ngFor="let c of (myStage==='rh' ? techConfig : rhConfig).evaluationGrid; let i = index">
+                <div class="criterion-num">{{ i + 1 }}</div>
+                <div class="criterion-body">
+                  <div class="criterion-label">{{ c.label }}</div>
+                  <div class="criterion-desc" *ngIf="c.description">{{ c.description }}</div>
+                </div>
+                <span class="criterion-type-pill">{{ criterionTypeLabel(c.type) }}</span>
+                <span class="criterion-weight">×{{ c.weight }}</span>
+              </div>
+            </div>
+            <div class="empty-hint" *ngIf="!(myStage==='rh' ? techConfig : rhConfig).evaluationGrid.length">
+              <i class="fa-solid fa-lock"></i>The other team hasn't configured their grid yet.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       JOB DETAIL: CALENDAR VIEW
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="view-panel" *ngIf="!loading && selectedJobObj && activeView==='calendar'">
+    <div class="calendar-stage-toggle">
+      <button [class.active]="calendarStageFilter==='rh'" (click)="calendarStageFilter='rh'">
+        <i class="fa-solid fa-user-tie"></i> RH <span class="toggle-count">{{ rhSessions.length }}</span>
+      </button>
+      <button [class.active]="calendarStageFilter==='technical evaluator'" (click)="calendarStageFilter='technical evaluator'">
+        <i class="fa-solid fa-laptop-code"></i> Tech <span class="toggle-count">{{ techSessions.length }}</span>
+      </button>
+      <button [class.active]="calendarStageFilter==='all'" (click)="calendarStageFilter='all'">
+        <i class="fa-solid fa-layer-group"></i> All <span class="toggle-count">{{ allSessions.length }}</span>
+      </button>
+    </div>
+
+    <div class="today-panel" *ngIf="todaySessions().length">
+      <div class="today-panel-header"><i class="fa-solid fa-bolt"></i><span>Today · {{ todaySessions().length }} interview(s)</span></div>
+      <div class="today-sessions">
+        <div class="today-session-card" *ngFor="let s of todaySessions()"
+          [class.completed]="s.status==='completed'"
+          [class.rh-session]="s.stage==='rh'"
+          [class.tech-session]="s.stage==='technical evaluator'">
+          <div class="session-stage-tag">{{ getSessionStageLabel(s.stage) }}</div>
+          <div class="session-time-big">{{ formatTime(s.scheduledAt) }}</div>
+          <div class="session-avatar-sm" [style.background]="getCandidateObj(s)?.avatarColor || '#4f6ef7'">
+            {{ getInitials(getCandidateObj(s)?.name || '?') }}
+          </div>
+          <div class="session-info-sm">
+            <div class="session-name">{{ getCandidateObj(s)?.name }}</div>
+            <div class="session-email">{{ getCandidateObj(s)?.email }}</div>
+          </div>
+          <span class="session-status-badge" [class]="'sst-' + s.status">{{ getStatusLabel(s.status) }}</span>
+          <button class="btn-start-eval" *ngIf="s.status !== 'completed' && canManageStage(s.stage)" (click)="startLiveEval(s)">
+            <i class="fa-solid fa-play"></i>{{ s.status === 'in_progress' ? 'Resume' : 'Start' }}
+          </button>
+          <button class="btn-view-eval secondary" *ngIf="s.status !== 'completed' && !canManageStage(s.stage)" (click)="startLiveEval(s)">
+            <i class="fa-solid fa-eye"></i> View
+          </button>
+          <button class="btn-view-eval" *ngIf="s.status === 'completed'" (click)="startLiveEval(s)">
+            <i class="fa-solid fa-eye"></i> View
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="calendar-wrap">
+      <div class="cal-nav">
+        <button class="cal-nav-btn" (click)="prevMonth()"><i class="fa-solid fa-chevron-left"></i></button>
+        <h2 class="cal-month">{{ calendarMonthLabel }}</h2>
+        <button class="cal-nav-btn" (click)="nextMonth()"><i class="fa-solid fa-chevron-right"></i></button>
+      </div>
+      <div class="cal-weekdays">
+        <div *ngFor="let d of ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']">{{ d }}</div>
+      </div>
+      <div class="cal-grid">
+        <div class="cal-blank" *ngFor="let _ of [].constructor(getFirstDayOffset())"></div>
+        <div class="cal-day" *ngFor="let day of calendarDays"
+          [class.today]="isToday(day.date)"
+          [class.has-sessions]="day.allSessions.length > 0"
+          [class.selected]="selectedDay?.date?.toDateString() === day.date.toDateString()"
+          (click)="selectDay(day)">
+          <span class="day-num">{{ day.date.getDate() }}</span>
+          <div class="day-dots" *ngIf="day.allSessions.length">
+            <span class="dot dot-rh" *ngIf="day.rhSessions.length" title="RH"></span>
+            <span class="dot dot-tech" *ngIf="day.techSessions.length" title="Tech"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="day-detail" *ngIf="selectedDay">
+      <div class="day-detail-header">
+        <h3><i class="fa-solid fa-calendar-day"></i>{{ selectedDay.date.toLocaleDateString('en-US', { weekday:'long', day:'numeric', month:'long' }) }}</h3>
+        <button class="btn-icon-round" (click)="selectedDay = null"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="session-list">
+        <div class="session-row" *ngFor="let s of selectedDay.allSessions"
+          [class.rh-row]="s.stage==='rh'"
+          [class.tech-row]="s.stage==='technical evaluator'">
+          <div class="session-stage-mini">{{ getSessionStageLabel(s.stage) }}</div>
+          <div class="session-time">{{ formatTime(s.scheduledAt) }}</div>
+          <div class="session-avatar-sm" [style.background]="getCandidateObj(s)?.avatarColor || '#4f6ef7'">
+            {{ getInitials(getCandidateObj(s)?.name || '?') }}
+          </div>
+          <div class="session-info-sm">
+            <div class="session-name">{{ getCandidateObj(s)?.name }}</div>
+            <div class="session-email">{{ getCandidateObj(s)?.email }}</div>
+          </div>
+          <span class="session-status-badge" [class]="'sst-' + s.status">{{ getStatusLabel(s.status) }}</span>
+          <button class="btn-start-eval" *ngIf="s.status !== 'completed' && canManageStage(s.stage)" (click)="startLiveEval(s)">
+            <i class="fa-solid fa-play"></i>{{ s.status === 'in_progress' ? 'Resume' : 'Start' }}
+          </button>
+          <button class="btn-view-eval secondary" *ngIf="s.status !== 'completed' && !canManageStage(s.stage)" (click)="startLiveEval(s)">
+            <i class="fa-solid fa-eye"></i> View
+          </button>
+          <button class="btn-view-eval" *ngIf="s.status === 'completed'" (click)="startLiveEval(s)">
+            <i class="fa-solid fa-eye"></i> View
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       ADMIN DECISIONS VIEW
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="view-panel admin-decisions-view" *ngIf="!loading && selectedJobObj && activeView==='admin-decisions' && isAdmin">
+    <div class="decision-kpis">
+      <div class="kpi-card kpi-pending"><div class="kpi-num">{{ pendingDecisionCount() }}</div><div class="kpi-label">Pending decision</div></div>
+      <div class="kpi-card kpi-hired"><div class="kpi-num">{{ hiredCount() }}</div><div class="kpi-label">Hired</div></div>
+      <div class="kpi-card kpi-rejected"><div class="kpi-num">{{ rejectedCount() }}</div><div class="kpi-label">Rejected</div></div>
+      <div class="kpi-card kpi-total"><div class="kpi-num">{{ readyCandidates.length }}</div><div class="kpi-label">Total candidates</div></div>
+    </div>
+    <div class="decision-grid">
+      <div class="decision-card" *ngFor="let report of candidateReports"
+        [class.hired]="report.candidate.adminDecision === 'hire'"
+        [class.rejected]="report.candidate.adminDecision === 'reject'">
+        <div class="dc-header">
+          <div class="avatar dc-avatar" [style.background]="report.candidate.avatarColor || 'linear-gradient(135deg,#4f6ef7,#7c3aed)'">
+            {{ getInitials(report.candidate.name) }}
+          </div>
+          <div class="dc-identity">
+            <div class="dc-name">{{ report.candidate.name }}</div>
+            <div class="dc-email">{{ report.candidate.email }}</div>
+            <div class="dc-score-chips">
+              <span class="score-chip rh-chip" *ngIf="report.rh?.overallRating">👔 {{ report.rh!.overallRating }}/10</span>
+              <span class="score-chip rh-chip pending-chip" *ngIf="!report.rh?.overallRating">👔 RH pending</span>
+              <span class="score-chip tech-chip" *ngIf="report.tech?.overallRating">💻 {{ report.tech!.overallRating }}/10</span>
+              <span class="score-chip tech-chip pending-chip" *ngIf="!report.tech?.overallRating">💻 Tech pending</span>
+            </div>
+          </div>
+          <div class="dc-decision-badge" *ngIf="report.candidate.adminDecision"
+            [class.hired-badge]="report.candidate.adminDecision === 'hire'"
+            [class.rejected-badge]="report.candidate.adminDecision === 'reject'">
+            {{ report.candidate.adminDecision === 'hire' ? '✅ Hired' : '❌ Rejected' }}
+          </div>
+        </div>
+        <div class="dc-stage-result" *ngIf="report.rh">
+          <div class="dc-stage-title rh-color">👔 RH Interview</div>
+          <div class="dc-stage-row">
+            <span>{{ formatDateTime(report.rh.scheduledAt) }}</span>
+            <span class="session-status-badge" [class]="'sst-' + report.rh.status">{{ getStatusLabel(report.rh.status) }}</span>
+          </div>
+          <div class="dc-stage-row" *ngIf="report.rh.overallRating">
+            <span>Score: <strong>{{ report.rh.overallRating }}/10</strong></span>
+            <span class="reco-mini" [class]="'reco-' + report.rh.recommendation">
+              {{ report.rh.recommendation === 'hire' ? '✅ Hire' : report.rh.recommendation === 'reject' ? '❌ Reject' : '🤔 Consider' }}
+            </span>
+          </div>
+          <div class="dc-comments" *ngIf="report.rh.comments"><i class="fa-solid fa-quote-left"></i> {{ report.rh.comments }}</div>
+        </div>
+        <div class="dc-stage-empty rh-color" *ngIf="!report.rh">
+          <i class="fa-solid fa-clock"></i> RH interview not yet scheduled
+        </div>
+        <div class="dc-stage-result" *ngIf="report.tech">
+          <div class="dc-stage-title tech-color">💻 Tech Interview</div>
+          <div class="dc-stage-row">
+            <span>{{ formatDateTime(report.tech.scheduledAt) }}</span>
+            <span class="session-status-badge" [class]="'sst-' + report.tech.status">{{ getStatusLabel(report.tech.status) }}</span>
+          </div>
+          <div class="dc-stage-row" *ngIf="report.tech.overallRating">
+            <span>Score: <strong>{{ report.tech.overallRating }}/10</strong></span>
+            <span class="reco-mini" [class]="'reco-' + report.tech.recommendation">
+              {{ report.tech.recommendation === 'hire' ? '✅ Hire' : report.tech.recommendation === 'reject' ? '❌ Reject' : '🤔 Consider' }}
+            </span>
+          </div>
+          <div class="dc-comments" *ngIf="report.tech.comments"><i class="fa-solid fa-quote-left"></i> {{ report.tech.comments }}</div>
+        </div>
+        <div class="dc-stage-empty tech-color" *ngIf="!report.tech">
+          <i class="fa-solid fa-clock"></i> Tech interview not yet scheduled
+        </div>
+        <div class="dc-actions" *ngIf="!report.candidate.adminDecision">
+          <button class="btn-final-hire" (click)="openReport(report)"><i class="fa-solid fa-gavel"></i> Make decision</button>
+        </div>
+        <div class="dc-decided" *ngIf="report.candidate.adminDecision">Decision made</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       LIVE EVALUATION VIEW
+  ══════════════════════════════════════════════════════════════ -->
+  <div class="live-eval-view" *ngIf="activeView==='live' && liveSession">
+    <div class="readonly-eval-banner" *ngIf="isReadOnlyEval">
+      <i class="fa-solid fa-eye"></i>
+      You are viewing the <strong>{{ liveSession.stage.toUpperCase() }}</strong> interview evaluation (read-only).
+    </div>
+    <div class="live-header">
+      <button class="btn-back-live" (click)="closeLiveEval()"><i class="fa-solid fa-arrow-left"></i> Exit</button>
+      <div class="live-candidate-info">
+        <div class="live-avatar" [style.background]="liveCandidate?.avatarColor || getCandidateObj(liveSession)?.avatarColor || '#4f6ef7'">
+          {{ getInitials(liveCandidate?.name || getCandidateObj(liveSession)?.name || '?') }}
+        </div>
+        <div class="live-cand-meta">
+          <span class="live-cand-name">{{ liveCandidate?.name || getCandidateObj(liveSession)?.name }}</span>
+          <span class="live-cand-email">{{ liveCandidate?.email || getCandidateObj(liveSession)?.email }}</span>
+        </div>
+        <span class="live-stage-badge" [class]="'stage-' + liveSession.stage">
+          {{ liveSession.stage === 'rh' ? '👔 HR Interview' : '💻 Tech Interview' }}
+        </span>
+      </div>
+      <div class="live-timer-group" *ngIf="!isReadOnlyEval">
+        <div class="live-timer" [class.running]="timerRunning">
+          <i class="fa-solid fa-stopwatch"></i>{{ timerDisplay }}
+        </div>
+        <button class="btn-timer" (click)="toggleTimer()">
+          <i class="fa-solid" [class.fa-play]="!timerRunning" [class.fa-pause]="timerRunning"></i>
+          {{ timerRunning ? 'Pause' : (timerSeconds > 0 ? 'Resume' : 'Start') }}
+        </button>
+      </div>
+      <div class="live-score-chip">
+        <div class="live-score-num">{{ computedScore.toFixed(1) }}</div>
+        <div class="live-score-label">/ 10 · {{ ratedCount }}/{{ scoreableCount }} rated</div>
+      </div>
+    </div>
+    <div class="live-progress">
+      <div class="live-progress-fill" [style.width]="scoreableCount ? (ratedCount / scoreableCount * 100) + '%' : '0%'"></div>
+    </div>
+    <div class="live-body">
+      <div class="live-criteria-col">
+        <h3 class="live-section-title">
+          <i class="fa-solid fa-clipboard-list"></i>Evaluation criteria
+          <span class="readonly-pill" *ngIf="isReadOnlyEval">👁 Read-only</span>
+        </h3>
+        <div class="empty-eval-hint" *ngIf="!liveCriteria.length">
+          <i class="fa-solid fa-triangle-exclamation"></i>No criteria configured for this stage.
+        </div>
+        <div class="live-criterion-card" *ngFor="let c of liveCriteria; let i = index"
+          [class.rated]="c.value !== null && c.value !== undefined"
+          [class.readonly]="isReadOnlyEval">
+          <div class="live-crit-header">
+            <div class="live-crit-left">
+              <span class="live-crit-num">{{ i + 1 }}</span>
+              <div>
+                <div class="live-crit-label">{{ c.label }}</div>
+                <div class="live-crit-desc" *ngIf="c.description">{{ c.description }}</div>
+              </div>
+            </div>
+            <div class="live-crit-right">
+              <span class="live-weight-pill" *ngIf="c.weight > 0">×{{ c.weight }}</span>
+              <span class="live-type-pill">{{ criterionTypeLabel(c.type) }}</span>
+            </div>
+          </div>
+          <div class="live-stars" *ngIf="c.type === 'rating_5'">
+            <button *ngFor="let s of range(5)" class="live-star"
+              [class.lit]="c.value >= s"
+              [disabled]="isReadOnlyEval"
+              (click)="setCriterionValue(i, c.value === s ? null : s)">★</button>
+            <span class="live-star-label" *ngIf="c.value">{{ c.value }}/5</span>
+          </div>
+          <div class="live-r10" *ngIf="c.type === 'rating_10'">
+            <button *ngFor="let s of range(10)" class="live-r10-btn"
+              [class.lit]="c.value >= s"
+              [disabled]="isReadOnlyEval"
+              (click)="setCriterionValue(i, c.value === s ? null : s)">{{ s }}</button>
+            <span class="live-star-label" *ngIf="c.value">{{ c.value }}/10</span>
+          </div>
+          <div class="live-yn" *ngIf="c.type === 'yes_no'">
+            <button class="live-yn-btn yes" [class.selected]="c.value === true" [disabled]="isReadOnlyEval"
+              (click)="setCriterionValue(i, c.value === true ? null : true)">
+              <i class="fa-solid fa-check"></i> Yes
+            </button>
+            <button class="live-yn-btn no" [class.selected]="c.value === false" [disabled]="isReadOnlyEval"
+              (click)="setCriterionValue(i, c.value === false ? null : false)">
+              <i class="fa-solid fa-xmark"></i> No
+            </button>
+          </div>
+          <textarea *ngIf="c.type === 'text'" class="live-text-area"
+            [value]="c.value || ''"
+            [readOnly]="isReadOnlyEval"
+            (input)="setCriterionValue(i, $any($event.target).value)"
+            placeholder="Observations…" rows="2"></textarea>
+        </div>
+      </div>
+      <div class="live-summary-col">
+        <div class="live-score-card">
+          <div class="live-score-header">Calculated score</div>
+          <div class="live-score-display">
+            <span class="live-score-big">{{ computedScore.toFixed(1) }}</span>
+            <span class="live-score-max">/ 10</span>
+          </div>
+          <div class="live-score-bar-wrap">
+            <div class="live-score-bar-fill"
+              [style.width]="(computedScore * 10) + '%'"
+              [style.background]="getScoreColor(computedScore)"></div>
+          </div>
+          <div class="live-score-meta">{{ ratedCount }} / {{ scoreableCount }} criteria rated</div>
+        </div>
+        <div class="live-comments-card">
+          <div class="live-section-title"><i class="fa-solid fa-comment-dots"></i> General observations</div>
+          <textarea class="live-text-area full" rows="5" [(ngModel)]="liveComments" [readOnly]="isReadOnlyEval"
+            placeholder="Strengths, areas for improvement, overall impression…"></textarea>
+        </div>
+        <div class="live-reco-card">
+          <div class="live-section-title"><i class="fa-solid fa-star"></i> Interview recommendation</div>
+          <div class="live-reco-group">
+            <button *ngFor="let r of recoOptions" class="live-reco-btn"
+              [class]="r.cls + (liveReco === r.value ? ' selected' : '')"
+              [disabled]="isReadOnlyEval"
+              (click)="!isReadOnlyEval && (liveReco = r.value)">
+              <i class="fa-solid {{ r.icon }}"></i>{{ r.label }}
+            </button>
+          </div>
+          <div class="reco-note" *ngIf="isReadOnlyEval">
+            <i class="fa-solid fa-info-circle"></i>Final hiring decisions are made by the admin.
+          </div>
+        </div>
+        <button class="btn-save-eval" *ngIf="!isReadOnlyEval" (click)="saveEval()" [disabled]="evalSaving">
+          <span *ngIf="!evalSaving"><i class="fa-solid fa-floppy-disk"></i>Save evaluation</span>
+          <span *ngIf="evalSaving"><i class="fa-solid fa-spinner fa-spin"></i>Saving…</span>
+        </button>
+        <button class="btn-ghost-close" *ngIf="isReadOnlyEval" (click)="closeLiveEval()">
+          <i class="fa-solid fa-arrow-left"></i> Back to calendar
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end .scheduler-root -->
+
+<!-- ══════════════════════════════════════════════════════════════
+     MODALS (outside .scheduler-root to avoid z-index issues)
+══════════════════════════════════════════════════════════════ -->
+
+<!-- Schedule modal -->
+<div class="modal-backdrop" *ngIf="showScheduleModal" (click)="showScheduleModal=false">
+  <div class="modal-card" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <div class="modal-title-group">
+        <h2>Schedule {{ scheduleStage.toUpperCase() }} interview</h2>
+        <div class="modal-sub" *ngIf="scheduleTarget">
+          <span class="avatar-xs" [style.background]="scheduleTarget.avatarColor || '#4f6ef7'">
+            {{ getInitials(scheduleTarget.name) }}
+          </span>
+          {{ scheduleTarget.name }}
+        </div>
+      </div>
+      <button class="modal-close" (click)="showScheduleModal=false"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <form [formGroup]="scheduleForm" (ngSubmit)="saveSchedule()" class="modal-body">
+      <div class="form-row">
+        <div class="form-group"><label>Date *</label><input type="date" formControlName="scheduledAt" class="form-input" /></div>
+        <div class="form-group"><label>Time *</label><input type="time" formControlName="startTime" class="form-input" /></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Type *</label>
+          <select formControlName="interviewType" class="form-input">
+            <option value="on-site">🏢 On-site</option>
+            <option value="video">🎥 Video call</option>
+            <option value="phone">📞 Phone</option>
+          </select>
+        </div>
+        <div class="form-group"><label>Location / Link</label><input type="text" formControlName="location" class="form-input" placeholder="Room A, Meet link…" /></div>
+      </div>
+      <div class="form-group"><label>Notes</label><textarea formControlName="notes" class="form-input" rows="2" placeholder="Topics to cover…"></textarea></div>
+      <div class="modal-footer">
+        <button type="button" class="btn-ghost" (click)="showScheduleModal=false">Cancel</button>
+        <button type="submit" class="btn-primary" [disabled]="scheduleForm.invalid || scheduleSaving">
+          <span *ngIf="!scheduleSaving"><i class="fa-solid fa-paper-plane"></i> Confirm</span>
+          <span *ngIf="scheduleSaving"><i class="fa-solid fa-spinner fa-spin"></i> Sending…</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Admin final decision modal -->
+<div class="modal-backdrop" *ngIf="selectedReport" (click)="selectedReport=null">
+  <div class="modal-card decision-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <div class="modal-title-group">
+        <h2><i class="fa-solid fa-gavel"></i> Final Decision</h2>
+        <div class="modal-sub" *ngIf="selectedReport">
+          <span class="avatar-xs" [style.background]="selectedReport.candidate.avatarColor || '#4f6ef7'">
+            {{ getInitials(selectedReport.candidate.name) }}
+          </span>
+          {{ selectedReport.candidate.name }}
+        </div>
+      </div>
+      <button class="modal-close" (click)="selectedReport=null"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="modal-body" *ngIf="selectedReport">
+      <div class="decision-scores">
+        <div class="ds-row" *ngIf="selectedReport.rh?.overallRating">
+          <span class="ds-label">👔 RH Score</span>
+          <span class="ds-score" [style.color]="getScoreColor(selectedReport.rh!.overallRating!)">{{ selectedReport.rh!.overallRating }}/10</span>
+          <span class="ds-reco reco-{{ selectedReport.rh!.recommendation }}">{{ selectedReport.rh!.recommendation }}</span>
+        </div>
+        <div class="ds-row" *ngIf="selectedReport.tech?.overallRating">
+          <span class="ds-label">💻 Tech Score</span>
+          <span class="ds-score" [style.color]="getScoreColor(selectedReport.tech!.overallRating!)">{{ selectedReport.tech!.overallRating }}/10</span>
+          <span class="ds-reco reco-{{ selectedReport.tech!.recommendation }}">{{ selectedReport.tech!.recommendation }}</span>
+        </div>
+        <div class="ds-row warning" *ngIf="!selectedReport.rh?.overallRating || !selectedReport.tech?.overallRating">
+          <i class="fa-solid fa-triangle-exclamation"></i>Some interviews are not yet completed. You can still decide.
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Admin notes (optional)</label>
+        <textarea class="form-input" rows="3" [(ngModel)]="adminDecisionNotes" placeholder="Reason for the decision…"></textarea>
+      </div>
+      <div class="decision-btns">
+        <button class="btn-final-hire-big" [disabled]="adminDecisionSaving" (click)="applyAdminDecision('hire')">
+          <i class="fa-solid fa-circle-check"></i>{{ adminDecisionSaving ? 'Saving…' : 'Hire this candidate' }}
+        </button>
+        <button class="btn-final-reject-big" [disabled]="adminDecisionSaving" (click)="applyAdminDecision('reject')">
+          <i class="fa-solid fa-circle-xmark"></i>{{ adminDecisionSaving ? 'Saving…' : 'Reject this candidate' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Test Period Blocked Modal ══ -->
+<div class="modal-backdrop" *ngIf="showBlockedModal" (click)="showBlockedModal = false">
+  <div class="modal-card blocked-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <div class="modal-title-group">
+        <h2><i class="fa-solid fa-lock"></i> Access Restricted</h2>
+      </div>
+      <button class="modal-close" (click)="showBlockedModal = false">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    <div class="modal-body blocked-modal-body">
+      <div class="blocked-icon">⏳</div>
+      <p class="blocked-message">{{ testPeriodBlockMessage }}</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-primary" (click)="showBlockedModal = false">
+        <i class="fa-solid fa-arrow-left"></i> Back to jobs
+      </button>
+    </div>
+  </div>
+</div>

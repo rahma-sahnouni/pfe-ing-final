@@ -1,0 +1,133 @@
+<div class="ct-wrapper">
+
+  <!-- Loading -->
+  <div class="ct-center" *ngIf="loading">
+    <div class="ct-spinner"></div>
+    <p class="ct-muted">Chargement du test…</p>
+  </div>
+
+  <!-- Error -->
+  <div class="ct-center" *ngIf="!loading && error">
+    <div class="ct-empty-icon">📋</div>
+    <h2 class="ct-empty-title">Erreur</h2>
+    <p class="ct-muted">{{ error }}</p>
+    <button class="ct-btn-nav" (click)="goBack()">← Retour</button>
+  </div>
+
+  <!-- Content -->
+  <ng-container *ngIf="!loading && !error && rhTest">
+
+    <!-- Back link -->
+    <div class="ct-back-row">
+      <button class="ct-btn-nav" (click)="goBack()">← Mon parcours</button>
+    </div>
+
+    <div class="ct-test-rh">
+
+      <!-- Header -->
+      <div class="ct-test-header">
+        <div class="ct-test-badge ct-badge-rh">Psychométrique</div>
+        <h1 class="ct-test-title">{{ rhTest.name }}</h1>
+        <p class="ct-test-desc" *ngIf="rhTest.description">{{ rhTest.description }}</p>
+        <p class="ct-test-desc" *ngIf="jobOffer">
+          Poste : <strong>{{ jobOffer.title }}</strong>
+        </p>
+
+        <!-- Progress Bar -->
+        <div class="ct-progress-wrap">
+          <div class="ct-progress-bar">
+            <div class="ct-progress-fill" [style.width.%]="rhProgress()"></div>
+          </div>
+          <span class="ct-progress-label">{{ rhProgress() }}% complété</span>
+        </div>
+      </div>
+
+      <!-- Already submitted -->
+      <div class="ct-submitted-msg" *ngIf="submitted">
+        <span class="ct-check-circle">✓</span> Ce test a été soumis avec succès.
+        <p class="ct-muted">Vous allez être redirigé vers votre parcours…</p>
+      </div>
+
+      <!-- Themes & Questions -->
+      <ng-container *ngIf="!submitted">
+        <div class="ct-theme" *ngFor="let theme of rhTest.themes">
+          <div class="ct-theme-header">
+            <span class="ct-theme-cat">{{ theme.category }}</span>
+            <h2 class="ct-theme-name">{{ theme.name }}</h2>
+          </div>
+
+          <div class="ct-model" *ngFor="let model of theme.models">
+            <div class="ct-model-label">{{ model.label }}</div>
+
+            <div class="ct-question-card"
+                 *ngFor="let q of model.questions; let qi = index">
+              <p class="ct-q-text">
+                <span class="ct-q-num">{{ qi + 1 }}.</span> {{ q.text }}
+              </p>
+
+              <!-- Single Choice -->
+              <div class="ct-options" *ngIf="q.answerType === 'single_choice'">
+                <label
+                  class="ct-option"
+                  *ngFor="let opt of q.options"
+                  [class.ct-option--selected]="getRhAnswer(q._id) === opt.text"
+                  (click)="setRhAnswer(q._id, opt.text)">
+                  <span class="ct-radio"
+                        [class.ct-radio--on]="getRhAnswer(q._id) === opt.text"></span>
+                  {{ opt.text }}
+                </label>
+              </div>
+
+              <!-- Multiple Choice -->
+              <div class="ct-options" *ngIf="q.answerType === 'multiple_choice'">
+                <label
+                  class="ct-option"
+                  *ngFor="let opt of q.options"
+                  [class.ct-option--selected]="isMultiSelected(q._id, opt.text)"
+                  (click)="toggleMulti(q._id, opt.text)">
+                  <span class="ct-checkbox"
+                        [class.ct-checkbox--on]="isMultiSelected(q._id, opt.text)"></span>
+                  {{ opt.text }}
+                </label>
+              </div>
+
+              <!-- Likert Scale -->
+              <div class="ct-likert" *ngIf="q.answerType === 'likert'">
+                <span class="ct-likert-pole">{{ q.likertMin || 'Pas du tout' }}</span>
+                <div class="ct-likert-dots">
+                  <button
+                    *ngFor="let val of [1,2,3,4,5]"
+                    class="ct-likert-dot"
+                    [class.ct-likert-dot--on]="likertValue(q._id) === val"
+                    (click)="setLikert(q._id, val)">
+                    {{ val }}
+                  </button>
+                </div>
+                <span class="ct-likert-pole">{{ q.likertMax || 'Tout à fait' }}</span>
+              </div>
+
+        
+
+            </div><!-- /question-card -->
+          </div><!-- /model -->
+        </div><!-- /theme -->
+
+        <!-- Submit -->
+        <div class="ct-submit-row">
+          <button
+            class="ct-btn-submit"
+            [disabled]="submitting || rhProgress() < 100"
+            (click)="submit()">
+            <span *ngIf="!submitting">Soumettre le test RH</span>
+            <span *ngIf="submitting" class="ct-spinner-sm"></span>
+          </button>
+          <p class="ct-muted" *ngIf="rhProgress() < 100">
+            Répondez à toutes les questions pour soumettre.
+          </p>
+        </div>
+      </ng-container>
+
+    </div>
+  </ng-container>
+
+</div>

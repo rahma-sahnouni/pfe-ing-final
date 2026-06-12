@@ -1,0 +1,61 @@
+<div class="rh-layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-icon">⚡</div>
+      <div class="brand-text">
+  <span class="brand-name">Nexus Peak</span>
+        <span class="brand-sub">RECURIMENT SOLUTIONS</span>      </div>
+    </div>
+
+    <nav class="nav-menu">
+      <a routerLink="my_applications" routerLinkActive="active" class="nav-item">
+        <span class="nav-icon">⊞</span>
+        <span>My applications</span>
+      </a>
+      <a routerLink="jobs" routerLinkActive="active" class="nav-item">
+        <span class="nav-icon">💼</span>
+        <span>Jobs</span>
+      </a>
+    
+      <a routerLink="my-journey" routerLinkActive="active" class="nav-item">
+        <span class="nav-icon">👥</span>
+        <span>my Journey</span>
+      </a>
+    
+    </nav>
+
+    <div class="nav-bottom">
+  <a (click)="logout()" class="nav-item">
+    <span class="nav-icon">⚙</span>
+    <span>log out</span>
+  </a>
+</div>
+  </aside>
+
+  <!-- Main Content Area -->
+  <main class="main-content">
+    <!-- Top Bar -->
+    <header class="topbar">
+      <div class="topbar-left"></div>
+      <div class="topbar-right">
+        <button class="icon-btn">🔔</button>
+        <button class="icon-btn">☀</button>
+  <div class="user-info" *ngIf="currentUser" routerLink="profile" style="cursor:pointer">
+  <div class="user-avatar">
+    {{ currentUser?.email?.charAt(0)?.toUpperCase() }}
+  </div>
+
+  <div class="user-name">{{ currentUser?.email }}</div>
+  <div class="user-role">{{ currentUser?.role }}</div>
+</div>
+      </div>
+    </header>
+  <app-session-expired-modal></app-session-expired-modal>
+
+    <!-- Router Outlet -->
+    <div class="page-content">
+      <router-outlet></router-outlet>
+    </div>
+  </main>
+</div>

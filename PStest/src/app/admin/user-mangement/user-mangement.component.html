@@ -1,0 +1,195 @@
+<div class="page">
+  <!-- Header -->
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">User Management</h1>
+      <p class="page-subtitle">Manage your recruitment team and platform permissions.</p>
+    </div>
+  </div>
+
+  <!-- Toolbar avec recherche et bouton création -->
+  <div class="toolbar">
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input
+        type="text"
+        placeholder="Search users by name, email or role..."
+        [(ngModel)]="searchQuery"
+        (ngModelChange)="onSearch()"
+      />
+    </div>
+    <div class="toolbar-right">
+      <button class="btn-create" (click)="openCreateModal()">+ Create New User</button>
+    </div>
+  </div>
+
+  <!-- Statistiques (résumé) -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">Total Users</div>
+      <div class="stat-value">{{ totalUsers }}</div>
+      <div class="stat-sub green">+4 this month</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Active Now</div>
+      <div class="stat-value">{{ activeNow }}</div>
+      <div class="stat-avatars">
+        <div class="mini-avatar">SJ</div>
+        <div class="mini-avatar">DC</div>
+        <div class="mini-avatar count">+9</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">HR Managers</div>
+      <div class="stat-value">{{ hrManagers }}</div>
+      <div class="stat-icon">👥</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Tech Evaluators</div>
+      <div class="stat-value">{{ techEvaluators }}</div>
+      <div class="stat-icon">&lt;/&gt;</div>
+    </div>
+  </div>
+
+  <!-- Layout principal : Sidebar + Cartes -->
+  <div class="main-layout">
+    <!-- Sidebar des rôles -->
+    <ul class="role-list">
+  <li
+    *ngFor="let role of roleOptions"
+    class="role-item"
+    [class.active]="selectedRole === role"
+    (click)="selectedRole = role"
+  >
+    <span class="role-icon">
+      <ng-container [ngSwitch]="role">
+        <span *ngSwitchCase="'All'">📋</span>
+        <span *ngSwitchCase="'HR Manager'">👥</span>
+        <span *ngSwitchCase="'Tech Evaluator'">⚙️</span>
+        <span *ngSwitchCase="'Admin'">🛡️</span>
+        <span *ngSwitchCase="'Candidate'">🎓</span>
+      </ng-container>
+    </span>
+    <span class="role-name">{{ role }}</span>
+    <span class="role-count">{{ getRoleCount(role) }}</span>
+  </li>
+</ul>
+    <!-- Zone de contenu : cartes utilisateur -->
+    <div class="cards-container">
+      <div *ngIf="filteredUsers.length === 0" class="no-results">
+        <p>No users found for this role.</p>
+      </div>
+      <div class="user-cards-grid">
+        <div class="user-card" *ngFor="let user of filteredUsers">
+          <div class="card-header">
+            <div class="user-avatar large">{{ user.initials }}</div>
+            <div class="card-actions">
+              <button class="action-icon delete" (click)="confirmDelete(user)" title="Delete">🗑️</button>
+               <button class="action-icon view" (click)="openDetailsModal(user)"
+  title="View details">
+    <i class="ti ti-eye"></i>
+  </button>
+            </div>
+          </div>
+          <div class="card-body">
+            <h3 class="user-name">{{ user.name }}</h3>
+            <p class="user-email">{{ user.email }}</p>
+            <div class="card-details">
+              <span class="badge" [ngClass]="user.role">
+                {{ user.role }}
+              </span>
+              <span class="status" [ngClass]="user.status === 'Active' ? 'status-active' : 'status-inactive'">
+                <span class="dot"></span> {{ user.status }}
+              </span>
+            </div>
+            <div class="user-meta">
+              <span>📅 {{ user.joinDate }}</span>
+              <span>🔑 {{ user.lastLogin }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== CREATE USER MODAL ===================== -->
+<div class="modal-backdrop" *ngIf="showCreateModal" (click)="closeCreateModal()"></div>
+<div class="modal" *ngIf="showCreateModal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal-header">
+    <div>
+      <h2 class="modal-title" id="modal-title">Create New User</h2>
+      <p class="modal-subtitle">Add a new staff member to the NexGen AI workspace.</p>
+    </div>
+  </div>
+  <div class="modal-body">
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Full Name</label>
+        <input type="text" class="form-input" placeholder="e.g. Sarah Jenkins" [(ngModel)]="newUser.name" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <input type="email" class="form-input" placeholder="sarah.j@nexgen-ai.com" [(ngModel)]="newUser.email" />
+      </div>
+    </div>
+    <div class="form-group full-width">
+      <div class="password-field">
+        <input [type]="showPassword ? 'text' : 'password'" class="form-input" [(ngModel)]="newUser.password" placeholder="Auto-generated password" />
+        <button class="toggle-password" (click)="showPassword = !showPassword" type="button">
+          {{ showPassword ? '🙈' : '👁' }}
+        </button>
+      </div>
+      <p class="form-hint">This password will be sent to the user via email. They can change it after first login.</p>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Select Role</label>
+        <div class="role-option" [class.selected]="newUser.role === 'HR Manager'" (click)="newUser.role = 'HR Manager'">
+          <div class="role-radio"><div class="radio-inner" *ngIf="newUser.role === 'HR Manager'"></div></div>
+          <div><div class="role-name">HR Manager</div><div class="role-desc">Manage jobs, candidates, and team workflows.</div></div>
+        </div>
+        <div class="role-option" [class.selected]="newUser.role === 'Tech Evaluator'" (click)="newUser.role = 'Tech Evaluator'">
+          <div class="role-radio"><div class="radio-inner" *ngIf="newUser.role === 'Tech Evaluator'"></div></div>
+          <div><div class="role-name">Technical Evaluator</div><div class="role-desc">Access assessments and technical screening tools.</div></div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Department</label>
+        <div class="select-wrapper">
+          <select class="form-select" [(ngModel)]="newUser.department">
+            <option value="Engineering">Engineering</option>
+            <option value="HR">HR</option>
+            <option value="Product">Product</option>
+            <option value="Design">Design</option>
+            <option value="Marketing">Marketing</option>
+            <option value="Finance">Finance</option>
+          </select>
+          <span class="select-arrow">▾</span>
+        </div>
+        <p class="form-hint">User will be grouped under this department in analytics.</p>
+      </div>
+    </div>
+    <div *ngIf="errorMessage" class="error-message">{{ errorMessage }}</div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn-cancel" (click)="closeCreateModal()">Cancel</button>
+    <button class="btn-save" (click)="saveUser()" [disabled]="!isFormValid()">Save Changes</button>
+  </div>
+</div>
+
+
+<!-- ===================== DELETE CONFIRMATION MODAL ===================== -->
+<div class="modal-backdrop" *ngIf="showDeleteConfirm" (click)="closeDeleteConfirm()"></div>
+<div class="modal modal-small" *ngIf="showDeleteConfirm" role="dialog" aria-modal="true">
+  <div class="modal-header">
+    <h2 class="modal-title">Confirm Delete</h2>
+  </div>
+  <div class="modal-body">
+    <p>Are you sure you want to delete user <strong>{{ deleteUserName }}</strong>? This action cannot be undone.</p>
+  </div>
+  <div class="modal-footer">
+    <button class="btn-cancel" (click)="closeDeleteConfirm()">Cancel</button>
+    <button class="btn-delete" (click)="deleteUser()">Delete</button>
+  </div>
+</div>

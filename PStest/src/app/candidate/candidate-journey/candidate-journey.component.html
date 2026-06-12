@@ -1,0 +1,554 @@
+<!-- src/app/candidate/candidate-journey/candidate-journey.component.html -->
+<div class="journey-wrapper">
+
+  <!-- ── Loading ─────────────────────────────────────────────────────────── -->
+  <div class="center-state" *ngIf="loading">
+    <div class="spinner"></div>
+    <p class="muted">Loading your recruitment journey…</p>
+  </div>
+
+  <!-- ── Error / Empty ───────────────────────────────────────────────────── -->
+  <div class="center-state" *ngIf="!loading && (error || !allJourneyItems.length)">
+    <div class="empty-icon">
+      <span class="material-icons">work_outline</span>
+    </div>
+    <h2 class="empty-title">No active applications</h2>
+    <p class="muted">{{ error || 'Apply to a job offer to see your recruitment journey here.' }}</p>
+  </div>
+
+  <!-- ── Main content ────────────────────────────────────────────────────── -->
+  <ng-container *ngIf="!loading && !error && allJourneyItems.length">
+
+    <!-- Job selector (shown only if multiple applications) -->
+    <div class="job-switcher" *ngIf="allJourneyItems.length > 1">
+      <span class="switcher-label">Position</span>
+      <div class="switcher-tabs">
+        <button
+          *ngFor="let item of allJourneyItems; let i = index; trackBy: trackByIdx"
+          class="switcher-tab"
+          [class.active]="i === selectedIndex"
+          (click)="selectJob(i)">
+          {{ item.jobOffer.title }}
+          <span class="tab-dept">{{ item.jobOffer.department }}</span>
+        </button>
+      </div>
+    </div>
+
+    <ng-container *ngIf="current">
+
+      <!-- ── Header card ──────────────────────────────────────────────────── -->
+      <div class="header-card">
+        <div class="header-left">
+          <div class="header-job-title">{{ current.jobOffer.title }}</div>
+          <div class="header-meta">
+            <span>{{ current.jobOffer.department }}</span>
+            <span class="meta-dot">·</span>
+            <span>{{ current.jobOffer.location }}</span>
+            <span class="meta-dot">·</span>
+            <span>{{ current.jobOffer.contractType }}</span>
+            <span class="meta-dot">·</span>
+            <span>Applied {{ formatDate(current.appliedDate) }}</span>
+          </div>
+        </div>
+        <div class="header-right">
+          <span class="app-status-badge"
+            [ngClass]="{
+              'status-pending':   current.applicationStatus === 'Pending',
+              'status-review':    current.applicationStatus === 'In Review',
+              'status-interview': current.applicationStatus === 'RH Interview' || current.applicationStatus === 'Tech Interview',
+              'status-accepted':  current.applicationStatus === 'Accepted',
+              'status-rejected':  current.applicationStatus === 'Rejected'
+            }">
+            {{ current.applicationStatus }}
+          </span>
+        </div>
+      </div>
+
+      <!-- ── Overview metrics ─────────────────────────────────────────────── -->
+      <div class="metrics-row">
+        <div class="metric-card">
+          <div class="metric-value" [ngClass]="scoreClass(current.aiMatchScore)">
+            {{ current.aiMatchScore !== null ? current.aiMatchScore + '%' : '—' }}
+          </div>
+          <div class="metric-label">AI match score</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value" [ngClass]="scoreClass(current.overallTestScore)">
+            {{ current.overallTestScore !== null ? current.overallTestScore + '%' : '—' }}
+          </div>
+          <div class="metric-label">Overall test score</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value">{{ current.currentStage }}/6</div>
+          <div class="metric-label">Current stage</div>
+        </div>
+        <div class="metric-card" *ngIf="pendingTestCount > 0">
+          <div class="metric-value pending-count">{{ pendingTestCount }}</div>
+          <div class="metric-label">Tests to complete</div>
+        </div>
+        <div class="metric-card" *ngIf="pendingTestCount === 0 && !isAllDone">
+          <div class="metric-value" style="font-size:14px;color:var(--color-text-success)">✓ Done</div>
+          <div class="metric-label">Tests submitted</div>
+        </div>
+      </div>
+
+      <!-- ── Progress bar ─────────────────────────────────────────────────── -->
+      <div class="progress-section">
+        <div class="progress-header">
+          <span class="progress-stage-label">{{ overallStageLabel }}</span>
+          <span class="progress-pct">{{ progressPercent }}%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" [style.width.%]="progressPercent"
+            [class.fill-accepted]="current.applicationStatus === 'Accepted'"
+            [class.fill-rejected]="current.applicationStatus === 'Rejected'">
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Call-to-action banner (pending tests) ────────────────────────── -->
+      <div class="cta-banner" *ngIf="pendingTestCount > 0 && current.currentStage <= 3">
+        <div class="cta-left">
+          <span class="material-icons cta-icon">assignment</span>
+          <div>
+            <div class="cta-title">You have {{ pendingTestCount }} test{{ pendingTestCount > 1 ? 's' : '' }} to complete</div>
+            <div class="cta-sub">Complete your tests to move to the next stage.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Interview banner ─────────────────────────────────────────────── -->
+      <div class="interview-banner"
+        *ngIf="(current.applicationStatus === 'RH Interview' || current.applicationStatus === 'Tech Interview') && current.interview">
+        <div class="ib-icon">
+          <span class="material-icons">event</span>
+        </div>
+        <div class="ib-body">
+          <div class="ib-title">Interview scheduled</div>
+          <div class="ib-detail" *ngIf="current.interview.scheduledAt">
+            <span class="material-icons ib-detail-icon">calendar_today</span>
+            {{ formatDateTime(current.interview.scheduledAt) }}
+          </div>
+          <div class="ib-detail" *ngIf="current.interview.location">
+            <span class="material-icons ib-detail-icon">place</span>
+            {{ current.interview.location }}
+          </div>
+          <div class="ib-detail" *ngIf="current.interview.type">
+            <span class="material-icons ib-detail-icon">
+              {{ current.interview.type === 'video' ? 'videocam' : current.interview.type === 'phone' ? 'phone' : 'business' }}
+            </span>
+            {{ current.interview.type | titlecase }} interview
+          </div>
+          <div class="ib-notes" *ngIf="current.interview.notes">
+            <span class="material-icons ib-detail-icon">notes</span>
+            {{ current.interview.notes }}
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Accepted / Rejected banner ───────────────────────────────────── -->
+      <div class="result-banner result-accepted" *ngIf="current.applicationStatus === 'Accepted'">
+        <span class="material-icons">check_circle</span>
+        <div>
+          <div class="rb-title">Congratulations — you have been selected!</div>
+          <div class="rb-sub">The HR team will contact you with next steps.</div>
+        </div>
+      </div>
+      <div class="result-banner result-rejected" *ngIf="current.applicationStatus === 'Rejected'">
+        <span class="material-icons">cancel</span>
+        <div>
+          <div class="rb-title">Application not successful</div>
+          <div class="rb-sub">Thank you for your participation. We encourage you to apply again in the future.</div>
+        </div>
+      </div>
+
+      <!-- ── Pipeline ─────────────────────────────────────────────────────── -->
+      <div class="pipeline">
+        <div class="pipeline-stage"
+          *ngFor="let stage of stages; let i = index; trackBy: trackByStageId"
+          [class.stage-done]="stage.state === 'done'"
+          [class.stage-active]="stage.state === 'active'"
+          [class.stage-locked]="stage.state === 'locked'">
+
+          <!-- Connector line -->
+          <div class="connector">
+            <div class="connector-line top-line"
+              [class.line-done]="stage.state === 'done' || (i > 0 && stages[i-1].state === 'done')"
+              *ngIf="i > 0">
+            </div>
+            <div class="connector-dot"
+              [class.dot-done]="stage.state === 'done'"
+              [class.dot-active]="stage.state === 'active'"
+              [class.dot-locked]="stage.state === 'locked'">
+              <span class="material-icons dot-icon" *ngIf="stage.state === 'done'">check</span>
+              <span class="dot-num" *ngIf="stage.state !== 'done'">{{ stage.id }}</span>
+            </div>
+            <div class="connector-line bottom-line"
+              [class.line-done]="stage.state === 'done'"
+              *ngIf="i < stages.length - 1">
+            </div>
+          </div>
+
+          <!-- Stage card -->
+          <div class="stage-card" (click)="toggleStage(stage.id)">
+            <div class="stage-card-header">
+              <div class="stage-header-left">
+                <span class="material-icons stage-icon">{{ stage.icon }}</span>
+                <div>
+                  <div class="stage-label">{{ stage.label }}</div>
+                  <div class="stage-desc-short">{{ stage.description }}</div>
+                </div>
+              </div>
+              <div class="stage-header-right">
+                <span class="stage-badge" [ngClass]="stage.badgeClass">{{ stage.badge }}</span>
+                <span class="material-icons expand-icon">
+                  {{ isExpanded(stage.id) ? 'expand_less' : 'expand_more' }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Expanded content -->
+            <div class="stage-card-body" *ngIf="isExpanded(stage.id)">
+              <div class="stage-divider"></div>
+
+              <!-- Stage 1: Screening ──────────────────────────────────── -->
+              <ng-container *ngIf="stage.key === 'screening'">
+                <div class="detail-row">
+                  <div class="detail-check check-done">
+                    <span class="material-icons">check</span>
+                  </div>
+                  <span class="detail-text">CV uploaded and parsed</span>
+                </div>
+                <div class="detail-row">
+                  <div class="detail-check check-done">
+                    <span class="material-icons">check</span>
+                  </div>
+                  <div class="detail-text-group">
+                    <span class="detail-text">AI matching score computed</span>
+                    <span class="score-badge" [ngClass]="scoreClass(current.aiMatchScore)">
+                      {{ scoreLabel(current.aiMatchScore) }}
+                    </span>
+                  </div>
+                </div>
+                <div class="detail-row">
+                  <div class="detail-check"
+                    [ngClass]="current.preSelected ? 'check-done' : 'check-pending'">
+                    <span class="material-icons" *ngIf="current.preSelected">check</span>
+                  </div>
+                  <span class="detail-text">Pre-selected by HR</span>
+                </div>
+              </ng-container>
+
+              <!-- Stage 2: RH tests ──────────────────────────────────── -->
+              <ng-container *ngIf="stage.key === 'rh-test'">
+                <div class="no-test-msg" *ngIf="current.rhTests.length === 0">
+                  No psychometric test required for this position.
+                </div>
+                <div class="test-item"
+                  *ngFor="let t of current.rhTests; trackBy: trackByIdx">
+                  <div class="test-item-left">
+                    <div class="detail-check"
+                      [ngClass]="t.submitted ? 'check-done' : 'check-pending'">
+                      <span class="material-icons" *ngIf="t.submitted">check</span>
+                    </div>
+                    <div>
+                      <div class="test-name">{{ t.name }}</div>
+                      <div class="test-meta" *ngIf="t.submission">
+                        Submitted {{ formatDate(t.submission.submittedAt) }}
+                      </div>
+                      <div class="test-meta" *ngIf="!t.submitted">Not yet submitted</div>
+                    </div>
+                  </div>
+                  <div class="test-item-right">
+                    <span class="score-badge"
+                      *ngIf="t.submission?.status === 'evaluated'"
+                      [ngClass]="scoreClass(t.submission?.score ?? null)">
+                      {{ scoreLabel(t.submission?.score ?? null) }}
+                    </span>
+                    <span class="score-badge score-na"
+                      *ngIf="t.submission?.status === 'pending_review'">
+                      Under review
+                    </span>
+                    <button class="go-btn" *ngIf="!t.submitted"
+                      (click)="$event.stopPropagation(); goToRhTest(current.jobOffer._id, t._id)">
+                      Take test →
+                    </button>
+                  </div>
+                </div>
+              </ng-container>
+
+              <!-- Stage 3: Technical tests ────────────────────────────── -->
+              <ng-container *ngIf="stage.key === 'tech-test'">
+                <div class="no-test-msg" *ngIf="current.technicalTests.length === 0">
+                  No technical test required for this position.
+                </div>
+                <div class="test-item"
+                  *ngFor="let t of current.technicalTests; trackBy: trackByIdx">
+                  <div class="test-item-left">
+                    <div class="detail-check"
+                      [ngClass]="t.submitted ? 'check-done' : 'check-pending'">
+                      <span class="material-icons" *ngIf="t.submitted">check</span>
+                    </div>
+                    <div>
+                      <div class="test-name">{{ t.title }}</div>
+                      <div class="test-tags">
+                        <span class="tag">{{ t.testType | titlecase }}</span>
+                        <span class="tag" [ngClass]="difficultyClass(t.difficulty)">
+                          {{ difficultyLabel(t.difficulty) }}
+                        </span>
+                      </div>
+                      <div class="test-meta" *ngIf="t.submission">
+                        Submitted {{ formatDate(t.submission.submittedAt) }}
+                      </div>
+                      <div class="test-meta" *ngIf="!t.submitted">Not yet submitted</div>
+                    </div>
+                  </div>
+                  <div class="test-item-right">
+                    <span class="score-badge"
+                      *ngIf="t.submission?.status === 'evaluated'"
+                      [ngClass]="scoreClass(t.submission?.score ?? null)">
+                      {{ scoreLabel(t.submission?.score ?? null) }}
+                    </span>
+                    <span class="score-badge score-na"
+                      *ngIf="t.submission?.status === 'pending_review'">
+                      Under review
+                    </span>
+                    <button class="go-btn" *ngIf="!t.submitted"
+                      (click)="$event.stopPropagation(); goToTechTest(current.jobOffer._id, t._id)">
+                      Take test →
+                    </button>
+                  </div>
+                </div>
+              </ng-container>
+<!-- Stage 4: Review ─────────────────────────────────────── -->
+<ng-container *ngIf="stage.key === 'review'">
+
+  <!-- Psychometric test row -->
+  <div class="detail-row">
+    <div class="detail-check"
+      [ngClass]="isRhTestsComplete() ? 'check-done' :
+                 current.rhApproved === 'rejected' ? 'check-rejected' : 'check-pending'">
+      <span class="material-icons" *ngIf="isRhTestsComplete()">check</span>
+      <span class="material-icons" *ngIf="!isRhTestsComplete() && current.rhApproved === 'rejected'">close</span>
+    </div>
+    <span class="detail-text">Psychometric test reviewed</span>
+    <ng-container *ngIf="current.rhTests.length === 0 && !isRhTestsComplete()">
+      <span class="score-badge score-na">N/A</span>
+    </ng-container>
+    <ng-container *ngIf="current.rhTests.length > 0 || isRhTestsComplete()">
+      <span class="score-badge score-high" *ngIf="isRhTestsComplete()">Approved</span>
+      <span class="score-badge score-low"  *ngIf="!isRhTestsComplete() && current.rhApproved === 'rejected'">Rejected</span>
+      <span class="score-badge score-na"   *ngIf="!isRhTestsComplete() && current.rhApproved === 'pending'">Pending review</span>
+    </ng-container>
+  </div>
+
+  <!-- Technical test row -->
+  <div class="detail-row">
+    <div class="detail-check"
+      [ngClass]="isTechTestsComplete() ? 'check-done' :
+                 current.techStatus === 'rejected' ? 'check-rejected' : 'check-pending'">
+      <span class="material-icons" *ngIf="isTechTestsComplete()">check</span>
+      <span class="material-icons" *ngIf="!isTechTestsComplete() && current.techStatus === 'rejected'">close</span>
+    </div>
+    <span class="detail-text">Technical test reviewed</span>
+    <ng-container *ngIf="current.technicalTests.length === 0 && !isTechTestsComplete()">
+      <span class="score-badge score-na">N/A</span>
+    </ng-container>
+    <ng-container *ngIf="current.technicalTests.length > 0 || isTechTestsComplete()">
+      <span class="score-badge score-high" *ngIf="isTechTestsComplete()">Approved</span>
+      <span class="score-badge score-low"  *ngIf="!isTechTestsComplete() && current.techStatus === 'rejected'">Rejected</span>
+      <span class="score-badge score-na"   *ngIf="!isTechTestsComplete() && current.techStatus === 'pending'">Pending review</span>
+    </ng-container>
+  </div>
+
+  <!-- Overall decision row -->
+  <div class="detail-row">
+    <div class="detail-check"
+      [ngClass]="isOverallDecisionDone() ? 'check-done' : 'check-pending'">
+      <span class="material-icons" *ngIf="isOverallDecisionDone()">check</span>
+    </div>
+    <span class="detail-text">Overall decision</span>
+    <span class="score-badge score-high" *ngIf="isOverallDecisionDone()">Ready for next stage</span>
+  </div>
+
+</ng-container>
+              <!-- Stage 5: Interview ──────────────────────────────────── -->
+<!-- Stage 5: Interview ──────────────────────────────────── -->
+<ng-container *ngIf="stage.key === 'interview'">
+  <div *ngIf="!current.interviews?.rh && !current.interviews?.tech" class="muted-info">
+    If selected, the HR team will schedule an interview and the details will appear here.
+  </div>
+
+  <!-- Entretien RH -->
+  <div *ngIf="current.interviews?.rh" class="interview-details-section">
+    <div class="interview-details-title">👔 RH Interview</div>
+    <div class="interview-details">
+      <div class="id-row" *ngIf="current.interviews?.rh?.scheduledAt">
+        <span class="material-icons id-icon">event</span>
+        <div>
+          <div class="id-label">Date & time</div>
+          <div class="id-value">{{ formatDateTime(current.interviews?.rh?.scheduledAt) }}</div>
+        </div>
+      </div>
+      <div class="id-row" *ngIf="current.interviews?.rh?.type">
+        <span class="material-icons id-icon">
+          {{ current.interviews?.rh?.type === 'video' ? 'videocam' : current.interviews?.rh?.type === 'phone' ? 'phone' : 'business' }}
+        </span>
+        <div>
+          <div class="id-label">Format</div>
+          <div class="id-value">{{ current.interviews?.rh?.type | titlecase }}</div>
+        </div>
+      </div>
+      <div class="id-row" *ngIf="current.interviews?.rh?.location">
+        <span class="material-icons id-icon">place</span>
+        <div>
+          <div class="id-label">Location / link</div>
+          <div class="id-value">{{ current.interviews?.rh?.location }}</div>
+        </div>
+      </div>
+      <div class="id-row" *ngIf="current.interviews?.rh?.notes">
+        <span class="material-icons id-icon">notes</span>
+        <div>
+          <div class="id-label">Notes from HR</div>
+          <div class="id-value">{{ current.interviews?.rh?.notes }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Entretien technique -->
+  <div *ngIf="current.interviews?.tech" class="interview-details-section">
+    <div class="interview-details-title">💻 Technical Interview</div>
+    <div class="interview-details">
+      <div class="id-row" *ngIf="current.interviews?.tech?.scheduledAt">
+        <span class="material-icons id-icon">event</span>
+        <div>
+          <div class="id-label">Date & time</div>
+          <div class="id-value">{{ formatDateTime(current.interviews?.tech?.scheduledAt) }}</div>
+        </div>
+      </div>
+      <div class="id-row" *ngIf="current.interviews?.tech?.type">
+        <span class="material-icons id-icon">
+          {{ current.interviews?.tech?.type === 'video' ? 'videocam' : current.interviews?.tech?.type === 'phone' ? 'phone' : 'business' }}
+        </span>
+        <div>
+          <div class="id-label">Format</div>
+          <div class="id-value">{{ current.interviews?.tech?.type | titlecase }}</div>
+        </div>
+      </div>
+      <div class="id-row" *ngIf="current.interviews?.tech?.location">
+        <span class="material-icons id-icon">place</span>
+        <div>
+          <div class="id-label">Location / link</div>
+          <div class="id-value">{{ current.interviews?.tech?.location }}</div>
+        </div>
+      </div>
+      <div class="id-row" *ngIf="current.interviews?.tech?.notes">
+        <span class="material-icons id-icon">notes</span>
+        <div>
+          <div class="id-label">Notes</div>
+          <div class="id-value">{{ current.interviews?.tech?.notes }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</ng-container>
+              <!-- Stage 6: Decision ───────────────────────────────────── -->
+              <ng-container *ngIf="stage.key === 'decision'">
+                <div class="decision-msg accepted"
+                  *ngIf="current.applicationStatus === 'Accepted'">
+                  <span class="material-icons">celebration</span>
+                  <span>You have been selected! The HR team will be in touch with next steps.</span>
+                </div>
+                <div class="decision-msg rejected"
+                  *ngIf="current.applicationStatus === 'Rejected'">
+                  <span class="material-icons">info</span>
+                  <span>Your application was not successful this time. Thank you for participating.</span>
+                </div>
+                <div class="muted-info"
+                  *ngIf="current.applicationStatus !== 'Accepted' && current.applicationStatus !== 'Rejected'">
+                  The final decision will be communicated here once all stages are complete.
+                </div>
+              </ng-container>
+
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </ng-container>
+  </ng-container>
+
+  <!-- ── Modal: pre-selection required ───────────────────────────────────── -->
+  <div class="modal-overlay" *ngIf="showPreSelectionModal" (click)="closeModal()">
+    <div class="modal-container" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <span class="material-icons modal-icon">info</span>
+        <h3>Pre-selection required</h3>
+      </div>
+      <div class="modal-body">
+        <p>You must be pre-selected by HR before you can access the tests.</p>
+        <p>Once your application is validated, you will receive a notification and will be able to take the tests from this page.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-btn modal-btn-primary" (click)="closeModal()">Got it</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modal: complete RH test first ───────────────────────────────────── -->
+  <div class="modal-overlay" *ngIf="showRhFirstModal" (click)="closeModal()">
+    <div class="modal-container" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <span class="material-icons modal-icon">assignment</span>
+        <h3>Complete the RH test first</h3>
+      </div>
+      <div class="modal-body">
+        <p>You must complete the psychometric (RH) test before accessing the technical test.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-btn modal-btn-primary" (click)="closeModal()">Got it</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modal: test period not started yet ──────────────────────────────── -->
+  <div class="modal-overlay"
+    *ngIf="showTestPeriodErrorModal && testPeriodErrorType === 'not_started'"
+    (click)="closeTestPeriodErrorModal()">
+    <div class="modal-container" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <span class="material-icons modal-icon" style="color: var(--color-warning, #f59e0b)">hourglass_top</span>
+        <h3>Tests not open yet</h3>
+      </div>
+      <div class="modal-body">
+        <p>{{ testPeriodErrorMessage }}</p>
+        <p>You will be notified when the test window opens.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-btn modal-btn-primary" (click)="closeTestPeriodErrorModal()">Got it</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modal: test window closed (missed) ──────────────────────────────── -->
+  <div class="modal-overlay"
+    *ngIf="showTestPeriodErrorModal && testPeriodErrorType === 'expired'"
+    (click)="closeTestPeriodErrorModal()">
+    <div class="modal-container" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <span class="material-icons modal-icon" style="color: var(--color-danger, #ef4444)">event_busy</span>
+        <h3>Test window closed</h3>
+      </div>
+      <div class="modal-body">
+        <p>{{ testPeriodErrorMessage }}</p>
+        <p>Please contact the HR department if you believe this is an error.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-btn modal-btn-primary" (click)="closeTestPeriodErrorModal()">Got it</button>
+      </div>
+    </div>
+  </div>
+
+</div>

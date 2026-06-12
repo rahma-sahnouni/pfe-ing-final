@@ -1,0 +1,661 @@
+<div class="rp-root">
+
+  <!-- ═══════════════════ HEADER ═══════════════════ -->
+  <header class="rp-header">
+    <div class="rp-header__brand">
+      <div class="rp-header__logo">
+        <svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="15" stroke="currentColor" stroke-width="1.5"/><path d="M8 16h16M16 8v16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="16" cy="16" r="4" fill="currentColor" opacity=".25"/></svg>
+      </div>
+      <div>
+        <span class="rp-header__eyebrow">Operations Centre</span>
+        <h1 class="rp-header__title">Recruitment Pipeline</h1>
+      </div>
+    </div>
+
+    <!-- Global KPI strip -->
+    <div class="rp-kpis">
+      <div class="rp-kpi">
+        <span class="rp-kpi__num">{{ totalJobs }}</span>
+        <span class="rp-kpi__lbl">Jobs</span>
+      </div>
+      <div class="rp-kpi-sep"></div>
+      <div class="rp-kpi">
+        <span class="rp-kpi__num">{{ totalCandidates }}</span>
+        <span class="rp-kpi__lbl">Applicants</span>
+      </div>
+      <div class="rp-kpi-sep"></div>
+      <div class="rp-kpi rp-kpi--warn">
+        <span class="rp-kpi__num">{{ pendingCount }}</span>
+        <span class="rp-kpi__lbl">Pending</span>
+      </div>
+      <div class="rp-kpi-sep"></div>
+      <div class="rp-kpi rp-kpi--success">
+        <span class="rp-kpi__num">{{ evaluatedCount }}</span>
+        <span class="rp-kpi__lbl">Evaluated</span>
+      </div>
+      <div class="rp-kpi-sep"></div>
+      <div class="rp-kpi rp-kpi--accent">
+        <span class="rp-kpi__num">{{ totalSubmissions }}</span>
+        <span class="rp-kpi__lbl">Submissions</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════════════ TOOLBAR ═══════════════════ -->
+  <div class="rp-toolbar">
+    <div class="rp-search">
+      <svg class="rp-search__ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+      <input class="rp-search__input" type="text" placeholder="Search jobs, departments, candidates…"
+        [(ngModel)]="searchQuery" (input)="applyFilters()"/>
+    </div>
+    <div class="rp-filters">
+      <select class="rp-sel" [(ngModel)]="statusFilter" (change)="applyFilters()">
+        <option value="all">All statuses</option>
+        <option value="open">Open</option>
+        <option value="draft">Draft</option>
+        <option value="paused">Paused</option>
+        <option value="closed">Closed</option>
+      </select>
+      <select class="rp-sel" [(ngModel)]="testFilter" (change)="applyFilters()">
+        <option value="all">All tests</option>
+        <option value="rh">RH test</option>
+        <option value="technical">Technical</option>
+        <option value="both">Both</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ STATES ═══════════════════ -->
+  <div class="rp-state" *ngIf="loading">
+    <div class="rp-spinner"></div>
+    <p>Loading recruitment data…</p>
+  </div>
+
+  <div class="rp-state rp-state--error" *ngIf="error && !loading">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="32" height="32">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+    <p>{{ error }}</p>
+  </div>
+
+  <div class="rp-state" *ngIf="!loading && !error && filteredJobs.length === 0">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="40" height="40">
+      <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
+    </svg>
+    <p>No jobs found matching your filters.</p>
+  </div>
+
+  <!-- ═══════════════════ PIPELINE JOBS ═══════════════════ -->
+  <div class="rp-jobs" *ngIf="!loading && !error">
+    <div class="rp-job"
+      *ngFor="let job of filteredJobs; trackBy: trackByJob"
+      [class.rp-job--open]="job.expanded">
+
+      <!-- ── Job row (clickable header) ── -->
+      <div class="rp-job__row" (click)="toggleJob(job)">
+
+        <!-- Status dot + name -->
+        <div class="rp-job__identity">
+          <span class="rp-dot" [ngClass]="dotClass(job.status)"></span>
+          <div>
+            <div class="rp-job__title">{{ job.title }}</div>
+            <div class="rp-job__meta">
+              <span *ngIf="job.department">{{ job.department }}</span>
+              <span class="rp-sep" *ngIf="job.department && job.location">·</span>
+              <span *ngIf="job.location">{{ job.location }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pipeline mini-bar -->
+        <div class="rp-pipeline-bar">
+          <div class="rp-pipeline-bar__step"
+            [class.step--done]="true"
+            title="Posted">
+            <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M5 8l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div class="rp-pipeline-bar__track"></div>
+          <div class="rp-pipeline-bar__step"
+            [class.step--done]="job.applicationsCount && job.applicationsCount > 0"
+            [class.step--pending]="!job.applicationsCount || job.applicationsCount === 0"
+            title="Applications">
+            <svg viewBox="0 0 16 16" fill="none"><path d="M8 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm-5 9a5 5 0 0 1 10 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </div>
+          <div class="rp-pipeline-bar__track"></div>
+          <div class="rp-pipeline-bar__step"
+            [class.step--done]="job.testAssignments?.rhTest?.enabled && job.rhTest?.status === 'active'"
+            [class.step--pending]="job.testAssignments?.rhTest?.enabled && job.rhTest?.status !== 'active'"
+            [class.step--na]="!job.testAssignments?.rhTest?.enabled"
+            title="RH Test">
+            <svg viewBox="0 0 16 16" fill="none"><path d="M3 8h10M8 3v10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </div>
+          <div class="rp-pipeline-bar__track"></div>
+          <div class="rp-pipeline-bar__step"
+            [class.step--done]="job.testAssignments?.technicalTest?.enabled && job.techTests?.length"
+            [class.step--pending]="job.testAssignments?.technicalTest?.enabled && !job.techTests?.length"
+            [class.step--na]="!job.testAssignments?.technicalTest?.enabled"
+            title="Technical Test">
+            <svg viewBox="0 0 16 16" fill="none"><polyline points="10 11 14 8 10 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="6 5 2 8 6 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div class="rp-pipeline-bar__track"></div>
+          <div class="rp-pipeline-bar__step"
+            [class.step--done]="(job.submissions?.length ?? 0) > 0 && job.evaluatedRatio === 1"
+            [class.step--pending]="(job.submissions?.length ?? 0) > 0 && job.evaluatedRatio !== 1"
+            [class.step--na]="!job.submissions?.length"
+            title="Review">
+            <svg viewBox="0 0 16 16" fill="none"><path d="M2 4h12M2 8h8M2 12h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </div>
+        </div>
+
+        <!-- Counts -->
+        <div class="rp-job__counts">
+          <span class="rp-count-chip rp-count-chip--blue">
+            <svg viewBox="0 0 16 16" fill="none" width="12" height="12"><path d="M8 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm-5 9a5 5 0 0 1 10 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            {{ job.applicationsCount || 0 }}
+          </span>
+          <span class="rp-count-chip rp-count-chip--purple" *ngIf="(job.submissions?.length ?? 0) > 0">
+            <svg viewBox="0 0 16 16" fill="none" width="12" height="12"><path d="M4 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.5"/><path d="M6 6h4M6 9h4M6 12h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            {{ job.submissions?.length }}
+          </span>
+          <span class="rp-status-tag" [ngClass]="statusTagClass(job.status)">{{ job.status | titlecase }}</span>
+        </div>
+
+        <!-- Chevron -->
+        <svg class="rp-chevron" [class.rp-chevron--up]="job.expanded" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </div>
+
+      <!-- ── Expanded panel ── -->
+      <div class="rp-job__panel" *ngIf="job.expanded">
+
+        <!-- Loading inside panel -->
+        <div class="rp-panel-loading" *ngIf="job.loadingSubmissions">
+          <div class="rp-spinner rp-spinner--sm"></div>
+          <span>Loading pipeline data…</span>
+        </div>
+
+        <ng-container *ngIf="!job.loadingSubmissions">
+
+          <!-- ── SECTION: Job Info ── -->
+          <div class="rp-section">
+            <div class="rp-section__label">
+              <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M5 3V2a2 2 0 0 1 4 0v1" stroke="currentColor" stroke-width="1.5"/></svg>
+              Job Details
+            </div>
+            <div class="rp-job-detail-grid">
+              <div class="rp-detail-item" *ngIf="job.contractType">
+                <span class="rp-detail-item__k">Contract</span>
+                <span class="rp-detail-item__v">{{ job.contractType }}</span>
+              </div>
+              <div class="rp-detail-item" *ngIf="job.experienceLevel">
+                <span class="rp-detail-item__k">Level</span>
+                <span class="rp-detail-item__v">{{ job.experienceLevel }}</span>
+              </div>
+              <div class="rp-detail-item" *ngIf="job.deadline">
+                <span class="rp-detail-item__k">Deadline</span>
+                <span class="rp-detail-item__v">{{ job.deadline | date:'mediumDate' }}</span>
+              </div>
+              <div class="rp-detail-item">
+                <span class="rp-detail-item__k">Applications</span>
+                <span class="rp-detail-item__v rp-detail-item__v--accent">{{ job.applicationsCount || 0 }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── SECTION: Assessment Grid ── -->
+          <div class="rp-section" *ngIf="job.testAssignments?.rhTest?.enabled || job.testAssignments?.technicalTest?.enabled">
+            <div class="rp-section__label">
+              <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M8 1v14M1 8h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              Assessments
+            </div>
+            <div class="rp-assess-grid">
+
+              <!-- RH Test card -->
+              <div class="rp-assess-card rp-assess-card--rh" *ngIf="job.testAssignments?.rhTest?.enabled">
+                <div class="rp-assess-card__header">
+                  <div class="rp-assess-card__ico rp-assess-card__ico--rh">
+                    <svg viewBox="0 0 20 20" fill="none" width="18" height="18"><circle cx="10" cy="7" r="4" stroke="currentColor" stroke-width="1.5"/><path d="M3 17a7 7 0 0 1 14 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                  </div>
+                  <div>
+                    <div class="rp-assess-card__type">Psychometric (RH)</div>
+                    <div class="rp-assess-card__name">{{ job.rhTest?.name || 'Not configured' }}</div>
+                  </div>
+                  <span class="rp-assess-status"
+                    [class.rp-assess-status--active]="job.rhTest?.status === 'active'"
+                    [class.rp-assess-status--draft]="job.rhTest?.status === 'draft' || !job.rhTest">
+                    {{ job.rhTest?.status || 'Not set up' }}
+                  </span>
+                </div>
+                <div class="rp-assess-card__body">
+                  <div class="rp-assess-stat" *ngIf="job.rhTest">
+                    <span>Themes</span><strong>{{ job.rhTest.themes?.length || 0 }}</strong>
+                  </div>
+                  <div class="rp-assess-stat">
+                    <span>Submissions</span>
+                    <strong>{{ countSubmissionsByKind(job.submissions, 'rh') }}</strong>
+                  </div>
+                  <div class="rp-assess-stat" *ngIf="job.testAssignments?.rhTest?.deadline">
+                    <span>Deadline</span>
+                    <strong>{{ job.testAssignments!.rhTest!.deadline | date:'shortDate' }}</strong>
+                  </div>
+                  <div class="rp-assess-assignees" *ngIf="job.testAssignments?.rhTest?.assignedTo?.length">
+                    <span>Assigned to</span>
+                    <div class="rp-avatars">
+                      <div class="rp-avatar-sm" *ngFor="let u of job.testAssignments!.rhTest!.assignedTo.slice(0,3)"
+                        [title]="u.name || u.email">
+                        {{ getInitials(u.name || u.email) }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <!-- RH score distribution mini-bar -->
+                <div class="rp-score-dist" *ngIf="getRhScores(job.submissions).length">
+                  <div class="rp-score-dist__label">Score distribution</div>
+                  <div class="rp-score-dist__bar">
+                    <div class="rp-score-dist__seg rp-score-dist__seg--high"
+                      [style.flex]="getScoreDist(job.submissions, 'rh').high"></div>
+                    <div class="rp-score-dist__seg rp-score-dist__seg--mid"
+                      [style.flex]="getScoreDist(job.submissions, 'rh').mid"></div>
+                    <div class="rp-score-dist__seg rp-score-dist__seg--low"
+                      [style.flex]="getScoreDist(job.submissions, 'rh').low"></div>
+                  </div>
+                  <div class="rp-score-dist__legend">
+                    <span class="rp-score-dist__leg--high">≥70%</span>
+                    <span class="rp-score-dist__leg--mid">45–69%</span>
+                    <span class="rp-score-dist__leg--low">&lt;45%</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Technical Test card -->
+              <div class="rp-assess-card rp-assess-card--tech" *ngIf="job.testAssignments?.technicalTest?.enabled">
+                <div class="rp-assess-card__header">
+                  <div class="rp-assess-card__ico rp-assess-card__ico--tech">
+                    <svg viewBox="0 0 20 20" fill="none" width="18" height="18"><polyline points="12 13 17 10 12 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="8 7 3 10 8 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </div>
+                  <div>
+                    <div class="rp-assess-card__type">Technical</div>
+                    <div class="rp-assess-card__name">{{ job.techTests?.length || 0 }} test(s)</div>
+                  </div>
+                  <span class="rp-assess-status rp-assess-status--active" *ngIf="job.techTests?.length">Ready</span>
+                  <span class="rp-assess-status rp-assess-status--draft" *ngIf="!job.techTests?.length">Not set up</span>
+                </div>
+                <div class="rp-assess-card__body">
+                  <div class="rp-tech-chips">
+                    <span class="rp-tech-chip" *ngFor="let t of job.techTests"
+                      [class.rp-tech-chip--easy]="t.difficulty === 'easy'"
+                      [class.rp-tech-chip--medium]="t.difficulty === 'medium'"
+                      [class.rp-tech-chip--hard]="t.difficulty === 'hard'">
+                      {{ t.title }} · {{ t.testType }} · {{ t.timeLimitMinutes }}min
+                    </span>
+                  </div>
+                  <div class="rp-assess-stat">
+                    <span>Submissions</span>
+                    <strong>{{ countSubmissionsByKind(job.submissions, 'technical') }}</strong>
+                  </div>
+                  <div class="rp-assess-stat" *ngIf="job.testAssignments?.technicalTest?.deadline">
+                    <span>Deadline</span>
+                    <strong>{{ job.testAssignments!.technicalTest.deadline | date:'shortDate' }}</strong>
+                  </div>
+                  <div class="rp-assess-assignees" *ngIf="job.testAssignments?.technicalTest?.assignedTo?.length">
+                    <span>Assigned to</span>
+                    <div class="rp-avatars">
+                      <div class="rp-avatar-sm" *ngFor="let u of job.testAssignments!.technicalTest.assignedTo.slice(0,3)"
+                        [title]="u.name || u.email">
+                        {{ getInitials(u.name || u.email) }}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="rp-score-dist" *ngIf="getTechScores(job.submissions).length">
+                  <div class="rp-score-dist__label">Score distribution</div>
+                  <div class="rp-score-dist__bar">
+                    <div class="rp-score-dist__seg rp-score-dist__seg--high"
+                      [style.flex]="getScoreDist(job.submissions, 'technical').high"></div>
+                    <div class="rp-score-dist__seg rp-score-dist__seg--mid"
+                      [style.flex]="getScoreDist(job.submissions, 'technical').mid"></div>
+                    <div class="rp-score-dist__seg rp-score-dist__seg--low"
+                      [style.flex]="getScoreDist(job.submissions, 'technical').low"></div>
+                  </div>
+                  <div class="rp-score-dist__legend">
+                    <span class="rp-score-dist__leg--high">≥70%</span>
+                    <span class="rp-score-dist__leg--mid">45–69%</span>
+                    <span class="rp-score-dist__leg--low">&lt;45%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── SECTION: Candidate Funnel ── -->
+          <div class="rp-section" *ngIf="getCandidatesForJob(job) as candidates">
+            <div class="rp-section__label">
+              <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="M6 7a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM1 14a5 5 0 0 1 10 0M14 5v6M11 8h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              Candidates
+              <span class="rp-section__count">{{ candidates.length }}</span>
+            </div>
+
+            <!-- Funnel stages row -->
+            <div class="rp-funnel">
+              <div class="rp-funnel__stage" *ngFor="let stage of getCandidateFunnel(candidates)">
+                <div class="rp-funnel__bar" [style.height.px]="stage.barHeight" [ngClass]="stage.colorClass"></div>
+                <div class="rp-funnel__num">{{ stage.count }}</div>
+                <div class="rp-funnel__lbl">{{ stage.label }}</div>
+              </div>
+            </div>
+
+            <!-- Candidate rows table -->
+            <div class="rp-cand-table-wrap" *ngIf="candidates.length">
+              <table class="rp-cand-table">
+                <thead>
+                  <tr>
+                    <th>Candidate</th>
+                    <th>Applied</th>
+                    <th>Status</th>
+                    <th>AI match</th>
+                    <th>Pre-selected</th>
+                    <th>RH test</th>
+                    <th>Tech test</th>
+                    <th>Avg score</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let c of candidates; trackBy: trackByCandidate"
+                    class="rp-cand-row"
+                    (click)="openCandidateDetail(c, job)">
+                    <td>
+                      <div class="rp-cand-id">
+                        <div class="rp-cand-avatar" [style.background]="c.avatarColor || '#6366f1'">
+                          {{ getInitials(c.name || c.email) }}
+                        </div>
+                        <div>
+                          <div class="rp-cand-name">{{ c.name || '—' }}</div>
+                          <div class="rp-cand-email">{{ c.email }}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="rp-cand-date">{{ c.appliedDate | date:'MMM d' }}</td>
+                    <td>
+                      <span class="rp-app-status" [ngClass]="appStatusClass(c.applicationStatus)">
+                        {{ c.applicationStatus }}
+                      </span>
+                    </td>
+                    <td>
+                      <span class="rp-score-badge" [ngClass]="scoreBadgeClass(c.aiMatchScore)">
+                        {{ c.aiMatchScore !== null && c.aiMatchScore !== undefined ? (c.aiMatchScore + '%') : '—' }}
+                      </span>
+                    </td>
+                    <td>
+                      <span class="rp-bool-badge" [class.rp-bool-badge--yes]="c.preSelected">
+                        {{ c.preSelected ? '✓ Yes' : '—' }}
+                      </span>
+                    </td>
+                    <td>
+                      <span class="rp-sub-chip" *ngIf="getCandidateRhSub(c._id, job.submissions) as sub"
+                        [ngClass]="subStatusClass(sub.status)">
+                        {{ sub.score !== null ? sub.score + '%' : 'Pending' }}
+                      </span>
+                      <span class="rp-sub-chip rp-sub-chip--none" *ngIf="!getCandidateRhSub(c._id, job.submissions)">—</span>
+                    </td>
+                    <td>
+                      <span class="rp-sub-chip" *ngIf="getCandidateTechSub(c._id, job.submissions) as sub"
+                        [ngClass]="subStatusClass(sub.status)">
+                        {{ sub.score !== null ? sub.score + '%' : 'Pending' }}
+                      </span>
+                      <span class="rp-sub-chip rp-sub-chip--none" *ngIf="!getCandidateTechSub(c._id, job.submissions)">—</span>
+                    </td>
+                    <td>
+                      <span class="rp-score-badge" [ngClass]="scoreBadgeClass(getCandidateAvgScore(c._id, job.submissions))">
+                        {{ getCandidateAvgScore(c._id, job.submissions) !== null ? (getCandidateAvgScore(c._id, job.submissions) + '%') : '—' }}
+                      </span>
+                    </td>
+                    <td>
+                      <button class="rp-view-btn" (click)="openCandidateDetail(c, job); $event.stopPropagation()">
+                        <svg viewBox="0 0 16 16" fill="none" width="14" height="14"><path d="m6 12 4-4-4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </ng-container>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ CANDIDATE DETAIL MODAL ═══════════════════ -->
+<div class="rp-modal-bg" *ngIf="showCandidateModal" (click)="closeModal()">
+  <div class="rp-modal" (click)="$event.stopPropagation()">
+
+    <button class="rp-modal__close" (click)="closeModal()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+
+    <ng-container *ngIf="selectedCandidate && selectedJob">
+      <!-- Header -->
+      <div class="rp-modal__head">
+        <div class="rp-modal-avatar" [style.background]="selectedCandidate.avatarColor || '#6366f1'">
+          {{ getInitials(selectedCandidate.name || selectedCandidate.email) }}
+        </div>
+        <div class="rp-modal__headinfo">
+          <h2 class="rp-modal__cname">{{ selectedCandidate.name || selectedCandidate.email }}</h2>
+          <div class="rp-modal__cmeta">
+            <span>{{ selectedCandidate.email }}</span>
+            <span class="rp-sep" *ngIf="selectedCandidate.phone">·</span>
+            <span *ngIf="selectedCandidate.phone">{{ selectedCandidate.phone }}</span>
+          </div>
+          <div class="rp-modal__job-ref">
+            <svg viewBox="0 0 16 16" fill="none" width="12" height="12"><rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/></svg>
+            {{ selectedJob.title }}
+          </div>
+        </div>
+        <span class="rp-app-status rp-app-status--lg" [ngClass]="appStatusClass(selectedCandidate.applicationStatus)">
+          {{ selectedCandidate.applicationStatus }}
+        </span>
+      </div>
+
+      <!-- Metrics row -->
+      <div class="rp-modal__metrics">
+        <div class="rp-m-metric">
+          <div class="rp-m-metric__val" [ngClass]="scoreBadgeClass(selectedCandidate.aiMatchScore)">
+            {{ selectedCandidate.aiMatchScore !== null && selectedCandidate.aiMatchScore !== undefined ? selectedCandidate.aiMatchScore + '%' : '—' }}
+          </div>
+          <div class="rp-m-metric__lbl">AI match</div>
+        </div>
+        <div class="rp-m-metric">
+          <div class="rp-m-metric__val" [ngClass]="scoreBadgeClass(getCandidateAvgScore(selectedCandidate._id, selectedJob.submissions))">
+            {{ getCandidateAvgScore(selectedCandidate._id, selectedJob.submissions) !== null ? (getCandidateAvgScore(selectedCandidate._id, selectedJob.submissions) + '%') : '—' }}
+          </div>
+          <div class="rp-m-metric__lbl">Avg test score</div>
+        </div>
+        <div class="rp-m-metric">
+          <div class="rp-m-metric__val" [class.rp-m-val--yes]="selectedCandidate.preSelected">
+            {{ selectedCandidate.preSelected ? 'Yes' : 'No' }}
+          </div>
+          <div class="rp-m-metric__lbl">Pre-selected</div>
+        </div>
+        <div class="rp-m-metric" *ngIf="selectedCandidate.experience !== undefined">
+          <div class="rp-m-metric__val">{{ selectedCandidate.experience }}y</div>
+          <div class="rp-m-metric__lbl">Experience</div>
+        </div>
+      </div>
+
+      <!-- Candidate pipeline stages -->
+      <div class="rp-modal__pipeline">
+        <h3 class="rp-modal__section-title">Recruitment Journey</h3>
+
+        <div class="rp-cand-pipeline">
+
+          <!-- Stage: Applied -->
+          <div class="rp-cp-stage rp-cp-stage--done">
+            <div class="rp-cp-dot rp-cp-dot--done">
+              <svg viewBox="0 0 16 16" fill="none" width="10" height="10"><path d="M3 8l3 3 7-7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="rp-cp-content">
+              <div class="rp-cp-label">Applied</div>
+              <div class="rp-cp-meta">{{ selectedCandidate.appliedDate | date:'mediumDate' }}</div>
+            </div>
+          </div>
+
+          <!-- Stage: AI Screening -->
+          <div class="rp-cp-stage rp-cp-stage--done">
+            <div class="rp-cp-dot rp-cp-dot--done">
+              <svg viewBox="0 0 16 16" fill="none" width="10" height="10"><path d="M3 8l3 3 7-7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="rp-cp-content">
+              <div class="rp-cp-label">AI Screening</div>
+              <div class="rp-cp-meta" *ngIf="selectedCandidate.aiMatchScore !== null && selectedCandidate.aiMatchScore !== undefined">
+                Match score: <strong [ngClass]="scoreBadgeClass(selectedCandidate.aiMatchScore)">{{ selectedCandidate.aiMatchScore }}%</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- Stage: Pre-selection -->
+          <div class="rp-cp-stage" [class.rp-cp-stage--done]="selectedCandidate.preSelected"
+            [class.rp-cp-stage--pending]="!selectedCandidate.preSelected">
+            <div class="rp-cp-dot"
+              [class.rp-cp-dot--done]="selectedCandidate.preSelected"
+              [class.rp-cp-dot--pending]="!selectedCandidate.preSelected">
+              <svg viewBox="0 0 16 16" fill="none" width="10" height="10" *ngIf="selectedCandidate.preSelected">
+                <path d="M3 8l3 3 7-7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <div class="rp-cp-content">
+              <div class="rp-cp-label">Pre-selection</div>
+              <div class="rp-cp-meta">{{ selectedCandidate.preSelected ? 'Pre-selected by HR' : 'Awaiting HR decision' }}</div>
+            </div>
+          </div>
+
+          <!-- Stage: RH Test -->
+          <ng-container *ngIf="selectedJob.testAssignments?.rhTest?.enabled">
+            <div class="rp-cp-stage"
+              [class.rp-cp-stage--done]="getCandidateRhSub(selectedCandidate._id, selectedJob.submissions)?.status === 'evaluated'"
+              [class.rp-cp-stage--active]="getCandidateRhSub(selectedCandidate._id, selectedJob.submissions) && getCandidateRhSub(selectedCandidate._id, selectedJob.submissions)?.status !== 'evaluated'"
+              [class.rp-cp-stage--pending]="!getCandidateRhSub(selectedCandidate._id, selectedJob.submissions)">
+              <div class="rp-cp-dot"
+                [class.rp-cp-dot--done]="getCandidateRhSub(selectedCandidate._id, selectedJob.submissions)?.status === 'evaluated'"
+                [class.rp-cp-dot--active]="getCandidateRhSub(selectedCandidate._id, selectedJob.submissions) && getCandidateRhSub(selectedCandidate._id, selectedJob.submissions)?.status !== 'evaluated'"
+                [class.rp-cp-dot--pending]="!getCandidateRhSub(selectedCandidate._id, selectedJob.submissions)">
+                <svg viewBox="0 0 16 16" fill="none" width="10" height="10" *ngIf="getCandidateRhSub(selectedCandidate._id, selectedJob.submissions)?.status === 'evaluated'">
+                  <path d="M3 8l3 3 7-7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <div class="rp-cp-content">
+                <div class="rp-cp-label">Psychometric Test</div>
+                <ng-container *ngIf="getCandidateRhSub(selectedCandidate._id, selectedJob.submissions) as sub">
+                  <div class="rp-cp-meta">
+                    Submitted {{ sub.submittedAt | date:'mediumDate' }}
+                    <span *ngIf="sub.score !== null"> · Score: <strong [ngClass]="scoreBadgeClass(sub.score)">{{ sub.score }}%</strong></span>
+                    <span *ngIf="sub.score === null"> · Under review</span>
+                  </div>
+                  <!-- Breakdown -->
+                  <div class="rp-cp-breakdown" *ngIf="sub.scoreBreakdown && sub.status === 'evaluated'">
+                    <div class="rp-breakdown-entry"
+                      *ngFor="let entry of getBreakdownEntries(sub.scoreBreakdown)">
+                      <span class="rp-breakdown-entry__k">{{ entry.key }}</span>
+                      <div class="rp-breakdown-bar">
+                        <div class="rp-breakdown-bar__fill" [style.width.%]="entry.value"
+                          [class.fill-high]="entry.value >= 70"
+                          [class.fill-mid]="entry.value >= 45 && entry.value < 70"
+                          [class.fill-low]="entry.value < 45"></div>
+                      </div>
+                      <span class="rp-breakdown-entry__v">{{ entry.value }}%</span>
+                    </div>
+                  </div>
+                </ng-container>
+                <div class="rp-cp-meta" *ngIf="!getCandidateRhSub(selectedCandidate._id, selectedJob.submissions)">
+                  Not yet submitted
+                </div>
+              </div>
+            </div>
+          </ng-container>
+
+          <!-- Stage: Technical Test -->
+          <ng-container *ngIf="selectedJob.testAssignments?.technicalTest?.enabled">
+            <div class="rp-cp-stage"
+              [class.rp-cp-stage--done]="getCandidateTechSub(selectedCandidate._id, selectedJob.submissions)?.status === 'evaluated'"
+              [class.rp-cp-stage--active]="getCandidateTechSub(selectedCandidate._id, selectedJob.submissions) && getCandidateTechSub(selectedCandidate._id, selectedJob.submissions)?.status !== 'evaluated'"
+              [class.rp-cp-stage--pending]="!getCandidateTechSub(selectedCandidate._id, selectedJob.submissions)">
+              <div class="rp-cp-dot"
+                [class.rp-cp-dot--done]="getCandidateTechSub(selectedCandidate._id, selectedJob.submissions)?.status === 'evaluated'"
+                [class.rp-cp-dot--active]="getCandidateTechSub(selectedCandidate._id, selectedJob.submissions) && getCandidateTechSub(selectedCandidate._id, selectedJob.submissions)?.status !== 'evaluated'"
+                [class.rp-cp-dot--pending]="!getCandidateTechSub(selectedCandidate._id, selectedJob.submissions)">
+                <svg viewBox="0 0 16 16" fill="none" width="10" height="10" *ngIf="getCandidateTechSub(selectedCandidate._id, selectedJob.submissions)?.status === 'evaluated'">
+                  <path d="M3 8l3 3 7-7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <div class="rp-cp-content">
+                <div class="rp-cp-label">Technical Test</div>
+                <ng-container *ngIf="getCandidateTechSub(selectedCandidate._id, selectedJob.submissions) as sub">
+                  <div class="rp-cp-meta">
+                    Submitted {{ sub.submittedAt | date:'mediumDate' }}
+                    <span *ngIf="sub.score !== null"> · Score: <strong [ngClass]="scoreBadgeClass(sub.score)">{{ sub.score }}%</strong></span>
+                    <span *ngIf="sub.score === null"> · {{ sub.status === 'pending_review' ? 'Under review' : 'Submitted' }}</span>
+                  </div>
+                </ng-container>
+                <div class="rp-cp-meta" *ngIf="!getCandidateTechSub(selectedCandidate._id, selectedJob.submissions)">
+                  Not yet submitted
+                </div>
+              </div>
+            </div>
+          </ng-container>
+
+          <!-- Stage: Status -->
+          <div class="rp-cp-stage"
+            [class.rp-cp-stage--done]="selectedCandidate.applicationStatus === 'Accepted' || selectedCandidate.applicationStatus === 'Rejected'"
+            [class.rp-cp-stage--active]="selectedCandidate.applicationStatus === 'In Review' || selectedCandidate.applicationStatus === 'Interview'"
+            [class.rp-cp-stage--pending]="selectedCandidate.applicationStatus === 'Pending'">
+            <div class="rp-cp-dot"
+              [class.rp-cp-dot--done]="selectedCandidate.applicationStatus === 'Accepted'"
+              [class.rp-cp-dot--danger]="selectedCandidate.applicationStatus === 'Rejected'"
+              [class.rp-cp-dot--active]="selectedCandidate.applicationStatus === 'In Review' || selectedCandidate.applicationStatus === 'Interview'"
+              [class.rp-cp-dot--pending]="selectedCandidate.applicationStatus === 'Pending'">
+              <svg viewBox="0 0 16 16" fill="none" width="10" height="10"
+                *ngIf="selectedCandidate.applicationStatus === 'Accepted' || selectedCandidate.applicationStatus === 'Rejected'">
+                <path d="M3 8l3 3 7-7" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                  *ngIf="selectedCandidate.applicationStatus === 'Accepted'"/>
+                <path d="M4 4l8 8M12 4l-8 8" stroke="white" stroke-width="2" stroke-linecap="round"
+                  *ngIf="selectedCandidate.applicationStatus === 'Rejected'"/>
+              </svg>
+            </div>
+            <div class="rp-cp-content">
+              <div class="rp-cp-label">Final Status</div>
+              <div class="rp-cp-meta">
+                <span class="rp-app-status" [ngClass]="appStatusClass(selectedCandidate.applicationStatus)">
+                  {{ selectedCandidate.applicationStatus }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CV info -->
+      <div class="rp-modal__cv" *ngIf="selectedCandidate.cv?.originalName">
+        <svg viewBox="0 0 20 20" fill="none" width="16" height="16"><path d="M4 2h8l4 4v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.5"/><polyline points="12 2 12 6 16 6" stroke="currentColor" stroke-width="1.5"/></svg>
+        <span>CV: {{ selectedCandidate.cv!.originalName }}</span>
+        <span class="rp-cv-date" *ngIf="selectedCandidate.cv!.uploadedAt">
+          Uploaded {{ selectedCandidate.cv!.uploadedAt | date:'mediumDate' }}
+        </span>
+      </div>
+
+      <!-- Skills -->
+      <div class="rp-modal__skills" *ngIf="selectedCandidate.cvExtracted?.skills?.length">
+        <div class="rp-modal__section-title-sm">Skills detected</div>
+        <div class="rp-skill-chips">
+          <span class="rp-skill-chip" *ngFor="let s of selectedCandidate.cvExtracted!.skills!.slice(0,15)">{{ s }}</span>
+        </div>
+      </div>
+
+    </ng-container>
+  </div>
+</div>

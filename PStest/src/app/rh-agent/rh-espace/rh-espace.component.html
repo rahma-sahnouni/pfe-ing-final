@@ -1,0 +1,114 @@
+<!-- src/app/rh-agent/rh-espace/rh-espace.component.html -->
+<div class="rh-layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-icon">⚡</div>
+      <div class="brand-text">
+        <span class="brand-name">Nexus Peak</span>
+        <span class="brand-sub">HR SOLUTIONS</span>
+      </div>
+    </div>
+
+    <nav class="nav-menu">
+      <a routerLink="dashboard" routerLinkActive="active" class="nav-item">
+  <i class="fa-solid fa-chart-line nav-icon"></i>
+  <span>Dashboard</span>
+</a>
+
+<a routerLink="jobs" routerLinkActive="active" class="nav-item"
+   (click)="onNavClick(['TECH_TEST_ASSIGNMENT', 'RH_ASSESSMENT_COMPLETE', 'technical_test_assigned', 'rh_test_completed'])">
+  <i class="fa-solid fa-briefcase nav-icon"></i>
+  <span>My Jobs</span>
+  <span class="badge" *ngIf="myJobsBadge > 0">{{ myJobsBadge }}</span>
+</a>
+  <a class="nav-item" routerLink="candidates" routerLinkActive="active">
+        <i class="icon">💼</i> Jobs Overview
+      </a>
+<a routerLink="job-tests" routerLinkActive="active" class="nav-item"
+   (click)="onNavClick(['RH_TEST_ASSIGNMENT', 'TECH_TEST_ASSIGNMENT'])">
+  <i class="fa-solid fa-file-circle-question nav-icon"></i>
+  <span>Tests</span>
+  <span class="badge" *ngIf="testsBadge > 0">{{ testsBadge }}</span>
+</a>
+
+
+
+<a routerLink="interview-scheduler" routerLinkActive="active" class="nav-item"
+   (click)="onNavClick(['RH_INTERVIEW_ASSIGNMENT', 'TECH_INTERVIEW_ASSIGNMENT'])">
+  <i class="fa-solid fa-calendar-alt nav-icon"></i>
+  <span>Interview Scheduler</span>
+  <span class="badge" *ngIf="interviewSchedulerBadge > 0">{{ interviewSchedulerBadge }}</span>
+</a>
+
+
+    </nav>
+
+    <div class="nav-bottom">
+      <a (click)="logout()" class="nav-item">
+        <span class="nav-icon">⚙</span><span>Log out</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <header class="topbar">
+      <div class="topbar-left"></div>
+      <div class="topbar-right">
+
+        <!-- Cloche notifications -->
+        <div class="notif-wrapper">
+          <button class="icon-btn notif-bell" (click)="toggleNotifications()">
+            🔔
+            <ng-container *ngIf="notifService.unreadCount$ | async as unreadCount">
+  <span class="notif-badge" *ngIf="unreadCount > 0">{{ unreadCount }}</span>
+</ng-container>
+          </button>
+
+          <!-- Dropdown notifications -->
+          <div class="notif-dropdown" *ngIf="showNotifications">
+            <div class="notif-dropdown-header">
+              <span>Notifications</span>
+              <span class="notif-count">{{ (notifService.notifications$ | async)?.length || 0 }}</span>
+            </div>
+            <div class="notif-list">
+              <ng-container *ngIf="notifService.notifications$ | async as notifs">
+                <div *ngIf="notifs.length === 0" class="notif-empty">
+                  Aucune notification
+                </div>
+                <div *ngFor="let n of notifs" class="notif-item" [class.unread]="!n.read">
+                  <span class="notif-type-icon">
+                    {{ n.type === 'RH_TEST_ASSIGNMENT' ? '👥' : '💻' }}
+                  </span>
+                  <div class="notif-body">
+                    <p class="notif-message">{{ n.message }}</p>
+                    <small class="notif-time">{{ n.createdAt | date:'dd/MM/yyyy HH:mm' }}</small>
+                  </div>
+                </div>
+              </ng-container>
+            </div>
+          </div>
+        </div>
+
+        <button class="icon-btn" (click)="toggleTheme()">
+          {{ isDarkMode ? '☀' : '🌙' }}
+        </button>
+
+        <div class="user-info" *ngIf="currentUser">
+          <div class="user-avatar">{{ currentUser.email?.charAt(0)?.toUpperCase() }}</div>
+          <div>
+            <div class="user-name">{{ currentUser.email }}</div>
+            <div class="user-role">{{ currentUser.role }}</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <div class="page-content">
+      <router-outlet></router-outlet>
+    </div>
+  </main>
+
+  <app-session-expired-modal></app-session-expired-modal>
+</div>

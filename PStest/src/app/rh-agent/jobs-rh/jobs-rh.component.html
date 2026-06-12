@@ -1,0 +1,238 @@
+<div class="jobs-page">
+  <!-- Page Header -->
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Job Offers</h1>
+      <p class="page-subtitle">Manage and track your open positions across departments.</p>
+    </div>
+    <button class="btn-create" (click)="openCreateModal()">+ Create New Job</button>
+  </div>
+
+  <!-- Stats Cards -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-label">ACTIVE JOBS</div>
+      <div class="stat-value">{{ activeJobsCount }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">TOTAL APPLICANTS</div>
+      <div class="stat-value">{{ totalApplicants }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">AVG. MATCH SCORE</div>
+      <div class="stat-value">N/A</div>
+    </div>
+  </div>
+
+  <!-- Search & Filters -->
+  <div class="search-bar">
+    <div class="search-input-wrap">
+      <span class="search-icon">🔍</span>
+      <input type="text" placeholder="Search active jobs by title or department..." [(ngModel)]="searchTerm" />
+    </div>
+    <div class="filters">
+      <select [(ngModel)]="filterDept">
+        <option value="">Department</option>
+        <option value="Engineering">Engineering</option>
+        <option value="Design">Design</option>
+        <option value="People">People</option>
+        <option value="Marketing">Marketing</option>
+        <option value="Finance">Finance</option>
+      </select>
+      <select [(ngModel)]="filterStatus">
+        <option value="">Status</option>
+        <option value="draft">Draft</option>
+        <option value="open">Open</option>
+        <option value="paused">Paused</option>
+        <option value="closed">Closed</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Cards Header -->
+  <div class="cards-header">
+    <span class="cards-count">Showing {{ filteredJobs().length }} of {{ jobs.length }} jobs</span>
+    <div class="pagination">
+      <button class="page-btn">‹</button>
+      <button class="page-btn active">1</button>
+      <button class="page-btn">2</button>
+      <button class="page-btn">›</button>
+    </div>
+  </div>
+
+  <!-- Cards Grid -->
+  <div class="cards-grid">
+    <div
+      class="job-card"
+      *ngFor="let job of filteredJobs(); let i = index"
+      [style.animation-delay]="(i * 0.05 + 0.1) + 's'"
+    >
+      <div class="card-top">
+        <div class="card-icon" [ngClass]="job.department?.toLowerCase()">
+          {{ deptIcon(job.department) }}
+        </div>
+        <div class="card-status-wrap">
+          <span class="status-dot-badge" [ngClass]="job.status">{{ job.status }}</span>
+          <span class="dept-badge" [ngClass]="job.department?.toLowerCase()">{{ job.department }}</span>
+        </div>
+      </div>
+
+      <div class="card-body">
+        <div class="job-title">{{ job.title }}</div>
+        <div class="job-meta-row">
+          <span class="meta-chip" *ngIf="job.location">📍 {{ job.location }}</span>
+          <span class="meta-chip" *ngIf="job.contractType">📄 {{ job.contractType }}</span>
+          <span class="meta-chip" *ngIf="job.experienceLevel">⭐ {{ job.experienceLevel }}</span>
+        </div>
+      </div>
+
+      <hr class="card-divider">
+
+      <div class="card-footer">
+        <div class="applicants-info">
+          <span class="applicants-count">{{ job.applicationsCount || 0 }}</span>
+          <span class="applicants-label">applicants</span>
+        </div>
+        <div class="card-actions">
+          <button class="action-btn" title="View"   (click)="openDetailsModal(job)">👁</button>
+          <button class="action-btn" title="Edit"   (click)="openEditModal(job)">✏</button>
+          <button class="action-btn danger" title="Delete" (click)="openDeleteModal(job)">🗑</button>
+<button class="action-btn candidates-btn" title="Candidates" (click)="goToCandidates(job)">👤</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer-row">
+    <span class="footer-text">Showing {{ filteredJobs().length }} of {{ jobs.length }} jobs</span>
+    <div class="pagination">
+      <button class="page-btn">‹</button>
+      <button class="page-btn active">1</button>
+      <button class="page-btn">2</button>
+      <button class="page-btn">3</button>
+      <button class="page-btn">›</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Modals ── -->
+
+<!-- Create -->
+<app-create-job-modal
+  *ngIf="showCreateModal"
+  (closed)="showCreateModal = false"
+  (jobCreated)="onJobCreated($event)"
+></app-create-job-modal>
+
+
+
+<!-- Edit -->
+<app-edit-job-modal
+  *ngIf="selectedJob && modalMode === 'edit'"
+  [job]="selectedJob"
+  (closed)="closeModal()"
+  (jobUpdated)="onJobUpdated($event)"
+></app-edit-job-modal>
+
+<!-- Delete Confirm -->
+<app-delete-job-modal
+  *ngIf="selectedJob && modalMode === 'delete'"
+  [job]="selectedJob"
+  (closed)="closeModal()"
+  (jobDeleted)="onJobDeleted($event)"
+></app-delete-job-modal>
+
+<!-- Dans jobs-rh.component.html, remplacer le bloc View modal par ceci : -->
+ 
+<!-- View / Details -->
+<app-job-details-modal
+  *ngIf="selectedJob && modalMode === 'view'"
+  [job]="selectedJob"
+  (closed)="closeModal()"
+  (jobUpdated)="onJobUpdated($event)"
+  (editRequested)="openEditModal($event)"
+></app-job-details-modal>
+
+<!-- NEW modal -->
+<app-job-details-modal
+  *ngIf="selectedJob && modalMode === 'details'"
+  [job]="selectedJob"
+  (closed)="closeModal()"
+  (jobUpdated)="onJobUpdated($event)"
+  (editRequested)="openEditModal($event)"
+></app-job-details-modal>
+ 
+<!-- Candidates Modal -->
+<div class="candidates-overlay" *ngIf="modalMode === 'candidates'" (click)="closeModal()">
+  <div class="candidates-modal" (click)="$event.stopPropagation()">
+
+    <div class="cm-header">
+      <div>
+        <h2 class="cm-title">Candidates</h2>
+        <p class="cm-subtitle">{{ selectedJob?.title }}</p>
+      </div>
+      <button class="cm-close" (click)="closeModal()">✕</button>
+    </div>
+
+    <!-- Loading -->
+    <div class="cm-loading" *ngIf="loadingCandidates">
+      <div class="cm-spinner"></div>
+      <span>Loading candidates...</span>
+    </div>
+
+    <!-- Empty -->
+    <div class="cm-empty" *ngIf="!loadingCandidates && candidates.length === 0">
+      <div class="cm-empty-icon">👤</div>
+      <p>No candidates yet</p>
+      <span>Applications will appear here once submitted.</span>
+    </div>
+
+    <!-- List -->
+    <div class="cm-list" *ngIf="!loadingCandidates && candidates.length > 0">
+  <div class="cm-card" *ngFor="let c of candidates">
+  <div class="cm-avatar" [style.background]="c.avatarColor || '#4f6ef7'">
+    {{ getInitials(c.name || c.email) }}
+  </div>
+  <div class="cm-info">
+    <div class="cm-name">{{ c.name || 'Unknown' }}</div>
+    <div class="cm-email">{{ c.email }}</div>
+    <div class="cm-meta-row">
+      <span class="cm-chip" *ngIf="c.location">📍 {{ c.location }}</span>
+      <span class="cm-chip" *ngIf="c.experience">💼 {{ c.experience }} yrs</span>
+      <!-- AI Score badge -->
+      <span class="cm-chip ai-score"
+        *ngIf="c.aiMatchScore !== null"
+        [ngClass]="{
+          'score-high': c.aiMatchScore >= 70,
+          'score-mid':  c.aiMatchScore >= 45 && c.aiMatchScore < 70,
+          'score-low':  c.aiMatchScore < 45
+        }">
+        🤖 AI: {{ c.aiMatchScore }}%
+      </span>
+      <span class="cm-chip score-na" *ngIf="c.aiMatchScore === null">🤖 AI: {{c.aiMatchScore}}</span>
+    </div>
+  </div>
+  <div class="cm-status-col">
+    <span class="cm-status-badge" [ngClass]="getAppStatus(c).toLowerCase().replace(' ', '-')">
+      {{ getAppStatus(c) }}
+    </span>
+    <!-- Pre-selection actions -->
+    <div class="cm-preselect-row">
+      <button
+        class="btn-preselect"
+        [class.active]="c.preSelected"
+        (click)="preSelectCandidate(c, !c.preSelected)">
+        {{ c.preSelected ? '✅ Pre-selected' : '⬜ Pre-select' }}
+      </button>
+    </div>
+  </div>
+</div>
+    </div>
+
+    <div class="cm-footer">
+      <span>{{ candidates.length }} candidate{{ candidates.length !== 1 ? 's' : '' }}</span>
+      <button class="cm-close-btn" (click)="closeModal()">Close</button>
+    </div>
+  </div>
+</div>

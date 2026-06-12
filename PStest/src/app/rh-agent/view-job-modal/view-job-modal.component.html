@@ -1,0 +1,136 @@
+<div class="modal-backdrop" (click)="close()">
+  <div class="modal-panel" (click)="$event.stopPropagation()">
+
+    <!-- Header -->
+    <div class="modal-header">
+      <div class="header-left">
+        <span class="modal-eyebrow">Job Offer</span>
+        <h2 class="modal-title">{{ job.title }}</h2>
+        <div class="header-badges">
+          <span class="status-badge" [ngClass]="job.status">{{ job.status }}</span>
+          <span class="dept-badge" [ngClass]="job.department?.toLowerCase()">{{ job.department }}</span>
+        </div>
+      </div>
+      <button class="close-btn" (click)="close()">✕</button>
+    </div>
+
+    <!-- Body -->
+    <div class="modal-body">
+
+      <!-- Meta row -->
+      <div class="meta-row">
+        <div class="meta-item">
+          <span class="meta-icon">📍</span>
+          <span>{{ job.location || '—' }}</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-icon">📄</span>
+          <span>{{ job.contractType || '—' }}</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-icon">🎯</span>
+          <span>{{ job.experienceLevel || '—' }}</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-icon">👥</span>
+          <span>{{ job.applicationsCount || 0 }} applicant(s)</span>
+        </div>
+      </div>
+
+      <!-- Description -->
+      <div class="section" *ngIf="job.description">
+        <h3 class="section-title">Description</h3>
+        <p class="description-text">{{ job.description }}</p>
+      </div>
+
+      <!-- Prerequisites -->
+      <div class="section" *ngIf="job.prerequisites?.length">
+        <h3 class="section-title">Prerequisites</h3>
+        <div class="tag-list">
+          <span class="tag tag--prereq" *ngFor="let p of job.prerequisites">
+            <strong>{{ p.type }}</strong>: {{ p.value || p.role }}
+            <span class="tag-mandatory" *ngIf="p.obligatory">Required</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- Skills -->
+      <div class="section" *ngIf="job.skills?.length">
+        <h3 class="section-title">Skills</h3>
+        <div class="skills-grid">
+          <div class="skill-card" *ngFor="let s of job.skills">
+            <div class="skill-name">{{ s.name }}</div>
+            <div class="skill-meta">
+              <div class="skill-level">
+                <span class="dot" *ngFor="let d of [1,2,3,4,5]" [class.filled]="d <= s.minLevel"></span>
+              </div>
+              <span class="skill-weight" *ngIf="s.weight">Weight: {{ s.weight }}%</span>
+            </div>
+            <span class="tag-mandatory" *ngIf="s.obligatory">Required</span>
+          </div>
+        </div>
+      </div>
+
+    
+      <!-- Test Assignments Status -->
+<div class="section">
+  <h3 class="section-title">Test Assignments</h3>
+  <div class="test-status-grid">
+
+    <!-- RH Test -->
+    <div class="test-status-card" [class.done]="rhTestDone" [class.pending]="rhTestEnabled && !rhTestDone" [class.disabled]="!rhTestEnabled">
+      <div class="test-status-icon">
+        <span *ngIf="rhTestDone">✅</span>
+        <span *ngIf="rhTestEnabled && !rhTestDone">⏳</span>
+        <span *ngIf="!rhTestEnabled">—</span>
+      </div>
+      <div class="test-status-info">
+        <div class="test-status-label">RH / Psychometric Test</div>
+        <div class="test-status-state" *ngIf="!rhTestEnabled">Not assigned</div>
+        <div class="test-status-state done-label" *ngIf="rhTestDone">Created</div>
+        <div class="test-status-state pending-label" *ngIf="rhTestEnabled && !rhTestDone">Assigned — not yet created</div>
+        <div class="test-status-assignees" *ngIf="rhAssignedTo.length">
+          <span class="assignee-label">Assigned to:</span>
+          <span class="assignee-id" *ngFor="let user of rhAssignedTo">
+  {{ user.name || user.email }}
+</span>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Technical Test -->
+    <div class="test-status-card" [class.done]="techTestDone" [class.pending]="techTestEnabled && !techTestDone" [class.disabled]="!techTestEnabled">
+      <div class="test-status-icon">
+        <span *ngIf="techTestDone">✅</span>
+        <span *ngIf="techTestEnabled && !techTestDone">⏳</span>
+        <span *ngIf="!techTestEnabled">—</span>
+      </div>
+      <div class="test-status-info">
+        <div class="test-status-label">Technical Test</div>
+        <div class="test-status-state" *ngIf="!techTestEnabled">Not assigned</div>
+        <div class="test-status-state done-label" *ngIf="techTestDone">Created</div>
+        <div class="test-status-state pending-label" *ngIf="techTestEnabled && !techTestDone">Assigned — not yet created</div>
+        <div class="test-status-assignees" *ngIf="techAssignedTo.length">
+          <span class="assignee-label">Assigned to:</span>
+          <span class="assignee-id" *ngFor="let user of techAssignedTo">
+  {{ user.name || user.email }}
+</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+
+    </div>
+
+    <!-- Footer -->
+    <div class="modal-footer">
+      <button class="btn-secondary" (click)="close()">Close</button>
+      <button class="btn-primary" (click)="editRequested.emit(job)">Edit Job</button>
+    </div>
+  </div>
+</div>

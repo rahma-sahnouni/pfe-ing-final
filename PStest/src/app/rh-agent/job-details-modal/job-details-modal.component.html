@@ -1,0 +1,360 @@
+<div class="jd-overlay" (click)="close()">
+  <div class="jd-modal" (click)="$event.stopPropagation()">
+
+    <!-- ── Header ── -->
+    <div class="jd-header">
+      <div class="jd-header-left">
+        <p class="jd-suptitle">Job details</p>
+        <h2 class="jd-title">{{ job.title }}</h2>
+        <div class="jd-header-chips">
+          <span class="jd-chip dept" [ngClass]="job.department?.toLowerCase()">
+            {{ job.department }}
+          </span>
+          <span class="jd-status-badge" [ngClass]="job.status">{{ job.status }}</span>
+          <span class="jd-chip muted" *ngIf="job.location">📍 {{ job.location }}</span>
+          <span class="jd-chip muted" *ngIf="job.contractType">📄 {{ job.contractType }}</span>
+          <span class="jd-chip muted" *ngIf="job.experienceLevel">⭐ {{ job.experienceLevel }}</span>
+        </div>
+      </div>
+      <button class="jd-close-btn" (click)="close()">✕</button>
+    </div>
+
+    <!-- ── Publish banner ── -->
+    <div class="jd-publish-bar" *ngIf="canPublish">
+      <div class="jd-publish-text">
+        <span class="jd-publish-icon">🚀</span>
+        <div>
+          <strong>This job is still a draft.</strong>
+          <p>Publish it to make it visible to candidates.</p>
+        </div>
+      </div>
+      <button class="jd-publish-btn" (click)="publishJob()" [disabled]="publishing">
+        <span *ngIf="!publishing">Publish job</span>
+        <span *ngIf="publishing" class="jd-spinner"></span>
+      </button>
+    </div>
+
+    <div class="jd-published-bar" *ngIf="job.status === 'open'">
+      <span>✅ This job is live and accepting applications.</span>
+    </div>
+
+    <!-- ── Stats row ── -->
+    <div class="jd-stats-row">
+      <div class="jd-stat">
+        <p class="jd-stat-label">Applicants</p>
+        <p class="jd-stat-value">{{ job.applicationsCount || 0 }}</p>
+      </div>
+      <div class="jd-stat">
+        <p class="jd-stat-label">RH test</p>
+        <p class="jd-stat-value">
+          <span *ngIf="loadingRh">...</span>
+          <span *ngIf="!loadingRh && rhTest">{{ totalRhQuestions }} Qs</span>
+          <span *ngIf="!loadingRh && !rhTest" class="jd-none">None</span>
+        </p>
+      </div>
+      <div class="jd-stat">
+        <p class="jd-stat-label">Technical tests</p>
+        <p class="jd-stat-value">
+          <span *ngIf="loadingTech">...</span>
+          <span *ngIf="!loadingTech">{{ technicalTests.length }}</span>
+        </p>
+      </div>
+      <div class="jd-stat">
+        <p class="jd-stat-label">Status</p>
+        <p class="jd-stat-value">
+          <span class="jd-inline-badge" [ngClass]="job.status">{{ job.status }}</span>
+        </p>
+      </div>
+    </div>
+
+    <!-- ── Tabs ── -->
+    <div class="jd-tabs">
+      <button class="jd-tab" [class.active]="activeTab === 'overview'"
+              (click)="activeTab = 'overview'">Overview</button>
+      <button class="jd-tab" [class.active]="activeTab === 'rh'"
+              (click)="activeTab = 'rh'">RH test</button>
+      <button class="jd-tab" [class.active]="activeTab === 'technical'"
+              (click)="activeTab = 'technical'">Technical tests</button>
+    </div>
+
+    <!-- ── Tab: Overview ── -->
+    <div class="jd-tab-content" *ngIf="activeTab === 'overview'">
+
+      <div class="jd-section" *ngIf="job.description">
+        <h3 class="jd-section-title">Description</h3>
+        <p class="jd-description">{{ job.description }}</p>
+      </div>
+
+      <div class="jd-section" *ngIf="job.skills && job.skills.length">
+        <h3 class="jd-section-title">Required skills</h3>
+        <div class="jd-skills-list">
+          <div class="jd-skill-row" *ngFor="let skill of job.skills">
+            <span class="jd-skill-name">{{ skill.name }}</span>
+            <div class="jd-skill-level">
+              <span
+                class="jd-dot"
+                *ngFor="let dot of [1,2,3,4,5]"
+                [class.filled]="dot <= (skill.minLevel || 0)"
+              ></span>
+            </div>
+            <span class="jd-skill-badge" *ngIf="skill.obligatory">Required</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="jd-section" *ngIf="job.prerequisites && job.prerequisites.length">
+        <h3 class="jd-section-title">Prerequisites</h3>
+        <div class="jd-prereq-list">
+          <div class="jd-prereq-row" *ngFor="let p of job.prerequisites">
+            <span class="jd-prereq-type">{{ p.type }}</span>
+            <span class="jd-prereq-value">{{ p.value || p.customLabel }}</span>
+            <span class="jd-skill-badge danger" *ngIf="p.obligatory">Mandatory</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="jd-section" *ngIf="job.stages && job.stages.length">
+        <h3 class="jd-section-title">Hiring stages</h3>
+        <div class="jd-stages">
+          <div class="jd-stage" *ngFor="let s of job.stages; let i = index">
+            <div class="jd-stage-num">{{ i + 1 }}</div>
+            <span class="jd-stage-label">{{ s.label }}</span>
+            <span class="jd-stage-eval" *ngIf="s.evaluator">{{ s.evaluator }}</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── Tab: RH Test ── -->
+    <div class="jd-tab-content" *ngIf="activeTab === 'rh'">
+
+      <div class="jd-loading" *ngIf="loadingRh">
+        <div class="jd-spinner-lg"></div>
+        <span>Loading RH test...</span>
+      </div>
+
+      <div class="jd-empty" *ngIf="!loadingRh && rhError">
+        <span class="jd-empty-icon">⚠️</span>
+        <p>Could not load the RH test.</p>
+        <button class="jd-retry-btn" (click)="loadRhTest()">Retry</button>
+      </div>
+
+      <div class="jd-empty" *ngIf="!loadingRh && !rhError && !rhTest">
+        <span class="jd-empty-icon">🧠</span>
+        <p>No RH test configured for this job.</p>
+      </div>
+
+      <div *ngIf="!loadingRh && !rhError && rhTest">
+        <div class="jd-rh-meta">
+          <div class="jd-rh-meta-row">
+            <span class="jd-rh-name">{{ rhTest.name }}</span>
+            <span class="jd-inline-badge" [ngClass]="rhTest.status">{{ rhTest.status }}</span>
+          </div>
+          <p class="jd-rh-desc" *ngIf="rhTest.description">{{ rhTest.description }}</p>
+          <div class="jd-rh-stats">
+            <span>{{ rhTest.themes.length }} theme{{ rhTest.themes.length !== 1 ? 's' : '' }}</span>
+            <span>·</span>
+            <span>{{ totalRhQuestions }} question{{ totalRhQuestions !== 1 ? 's' : '' }}</span>
+          </div>
+        </div>
+
+        <div class="jd-theme-list">
+          <div class="jd-theme-card" *ngFor="let theme of rhTest.themes">
+
+            <!-- Theme header -->
+            <div class="jd-theme-header">
+              <span class="jd-theme-icon">{{ categoryIcon(theme.category) }}</span>
+              <div>
+                <p class="jd-theme-name">{{ theme.name }}</p>
+                <p class="jd-theme-cat">{{ theme.category }}</p>
+              </div>
+              <span class="jd-theme-count">
+                {{ theme.models.length }} model{{ theme.models.length !== 1 ? 's' : '' }}
+              </span>
+            </div>
+
+            <!-- Models summary row -->
+            <div class="jd-model-list" *ngIf="theme.models.length">
+              <div class="jd-model-row" *ngFor="let model of theme.models">
+                <span class="jd-model-label">{{ model.label || model.modelType }}</span>
+                <span class="jd-model-weight">Weight: {{ model.weight }}%</span>
+                <span class="jd-model-qs">{{ model.questions?.length || 0 }} Qs</span>
+              </div>
+            </div>
+
+            <!-- Questions per model — uses Question type: q.text, q.answerType, q.likertMin/Max, q.options -->
+            <ng-container *ngFor="let model of theme.models">
+              <div class="jd-question-list" *ngIf="model.questions && model.questions.length">
+                <div class="jd-question-item" *ngFor="let q of model.questions; let qi = index">
+
+                  <span class="jd-question-num">{{ qi + 1 }}</span>
+
+                  <div class="jd-question-body">
+                    <span class="jd-question-text">{{ q.text }}</span>
+
+                    <!-- Likert scale -->
+                    <div class="jd-likert-row" *ngIf="$any(q).answerType === 'likert'">
+                      <span class="jd-likert-label">{{ $any(q).likertMin }}</span>
+                      <div class="jd-likert-scale">
+                        <span class="jd-likert-dot" *ngFor="let n of [1,2,3,4,5]">{{ n }}</span>
+                      </div>
+                      <span class="jd-likert-label">{{ $any(q).likertMax }}</span>
+                    </div>
+
+                  <!-- Single choice / Multiple choice options -->
+<!-- Single choice / Multiple choice options -->
+<div class="jd-options-list"
+     *ngIf="($any(q).answerType === 'multiple_choice' || $any(q).answerType === 'single_choice') && $any(q).options?.length">
+  <div class="jd-option-row"
+       *ngFor="let opt of $any(q).options"
+       [class.correct]="$any(opt).isCorrect">
+    <span class="jd-option-marker"
+          [class.correct-mark]="$any(opt).isCorrect"
+          [class.radio]="$any(q).answerType === 'single_choice'">
+      <span *ngIf="$any(opt).isCorrect">✓</span>
+    </span>
+
+    <span class="jd-option-text" [class.correct-text]="$any(opt).isCorrect">
+      {{ opt.text }}
+    </span>
+
+    <!-- Criterion badge -->
+    <span class="jd-option-criterion" *ngIf="$any(opt).criterionKey">
+      {{ $any(opt).criterionKey }}
+    </span>
+
+    <!-- Score badge -->
+    <span class="jd-option-score" *ngIf="$any(opt).score !== undefined">
+      {{ $any(opt).score }} pts
+    </span>
+  </div>
+</div>            </div>
+
+                  <span class="jd-question-type" *ngIf="$any(q).answerType">
+                    {{ $any(q).answerType }}
+                  </span>
+
+                </div>
+              </div>
+            </ng-container>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Tab: Technical Tests ── -->
+    <div class="jd-tab-content" *ngIf="activeTab === 'technical'">
+
+      <div class="jd-loading" *ngIf="loadingTech">
+        <div class="jd-spinner-lg"></div>
+        <span>Loading technical tests...</span>
+      </div>
+
+      <div class="jd-empty" *ngIf="!loadingTech && techError">
+        <span class="jd-empty-icon">⚠️</span>
+        <p>Could not load technical tests.</p>
+        <button class="jd-retry-btn" (click)="loadTechnicalTests()">Retry</button>
+      </div>
+
+      <div class="jd-empty" *ngIf="!loadingTech && !techError && technicalTests.length === 0">
+        <span class="jd-empty-icon">💻</span>
+        <p>No technical tests assigned to this job.</p>
+      </div>
+
+      <div class="jd-tech-list" *ngIf="!loadingTech && !techError && technicalTests.length > 0">
+        <div class="jd-tech-card" *ngFor="let t of technicalTests; let i = index">
+
+          <div class="jd-tech-card-top">
+            <div class="jd-tech-icon">{{ testTypeIcon(t.testType) }}</div>
+            <div class="jd-tech-info">
+              <p class="jd-tech-title">{{ t.title }}</p>
+              <p class="jd-tech-desc" *ngIf="t.description">{{ t.description }}</p>
+            </div>
+            <div class="jd-tech-badges">
+              <span class="jd-diff-badge" [ngClass]="t.difficulty">{{ t.difficulty }}</span>
+              <span class="jd-chip muted">⏱ {{ t.timeLimitMinutes }} min</span>
+            </div>
+          </div>
+
+          <div class="jd-tech-meta">
+            <span class="jd-chip muted">Type: {{ t.testType }}</span>
+            <span class="jd-chip muted" *ngIf="t.testType === 'qcm' || t.testType === 'mixed'">
+              📝 {{ t.qcm?.questions?.length || 0 }} QCM questions
+            </span>
+            <span class="jd-chip muted" *ngIf="t.testType === 'problem_solving' || t.testType === 'mixed'">
+              💡 Problem solving
+            </span>
+            <span class="jd-chip muted" *ngIf="t.tags && t.tags.length">
+              🏷 {{ t.tags.join(', ') }}
+            </span>
+          </div>
+
+          <!-- Problem solving examples -->
+          <div class="jd-ps-block"
+               *ngIf="(t.testType === 'problem_solving' || t.testType === 'mixed') && t.problemSolving">
+            <p class="jd-ps-label">Examples</p>
+            <div class="jd-ps-example" *ngFor="let ex of t.problemSolving!.examples | slice:0:2">
+              <span class="jd-ps-in">In: <code>{{ formatValue(ex.input) }}</code></span>
+              <span class="jd-ps-out">Out: <code>{{ formatValue(ex.output) }}</code></span>
+            </div>
+            <p class="jd-ps-complexity" *ngIf="t.problemSolving!.expectedComplexity">
+              Expected complexity: <code>{{ t.problemSolving!.expectedComplexity }}</code>
+            </p>
+          </div>
+
+          <!-- QCM Questions — uses QcmQuestion type: q.questionText, q.type, q.options[].isCorrect -->
+          <div class="jd-qcm-block"
+               *ngIf="(t.testType === 'qcm' || t.testType === 'mixed') && t.qcm?.questions?.length">
+            <p class="jd-ps-label">QCM Questions</p>
+            <div class="jd-qcm-question" *ngFor="let q of t.qcm!.questions; let qi = index">
+
+              <div class="jd-qcm-q-header">
+                <span class="jd-question-num">{{ qi + 1 }}</span>
+                <span class="jd-question-text">{{ q.questionText }}</span>
+                <span class="jd-question-type"
+                      [class.type-single]="q.type === 'single_choice'"
+                      [class.type-multiple]="q.type === 'multiple_choice'">
+                  {{ q.type === 'single_choice' ? '◉ single' : q.type === 'multiple_choice' ? '☑ multiple' : q.type }}
+                </span>
+              </div>
+
+              <div class="jd-options-list">
+                <div class="jd-option-row"
+                     *ngFor="let opt of q.options"
+                     [class.correct]="opt.isCorrect">
+                  <span class="jd-option-marker"
+                        [class.correct-mark]="opt.isCorrect"
+                        [class.radio]="q.type === 'single_choice'">
+                    <span *ngIf="opt.isCorrect">✓</span>
+                  </span>
+                  <span class="jd-option-text" [class.correct-text]="opt.isCorrect">
+                    {{ opt.text }}
+                  </span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Footer ── -->
+    <div class="jd-footer">
+      <button class="jd-footer-close" (click)="close()">Close</button>
+      <button
+        class="jd-footer-publish"
+        *ngIf="canPublish"
+        (click)="publishJob()"
+        [disabled]="publishing"
+      >
+        <span *ngIf="!publishing">🚀 Publish job</span>
+        <span *ngIf="publishing">Publishing...</span>
+      </button>
+    </div>
+
+  </div>
+</div>

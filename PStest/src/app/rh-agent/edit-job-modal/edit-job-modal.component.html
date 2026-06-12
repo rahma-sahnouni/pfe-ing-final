@@ -1,0 +1,363 @@
+<div class="modal-backdrop" (click)="close()">
+  <div class="modal-panel" (click)="$event.stopPropagation()">
+
+    <!-- Header -->
+    <div class="modal-header">
+      <div>
+        <span class="modal-eyebrow">Edit Job Offer</span>
+        <h2 class="modal-title">{{ form.title || 'Untitled' }}</h2>
+      </div>
+      <button class="close-btn" (click)="close()">✕</button>
+    </div>
+
+    <!-- Body -->
+    <div class="modal-body">
+
+      <!-- ── Basic Info ── -->
+      <div class="form-section">
+        <h3 class="section-title">Basic Information</h3>
+        <div class="form-grid">
+          <div class="form-group full">
+            <label>Job Title <span class="required">*</span></label>
+            <input type="text" [(ngModel)]="form.title" placeholder="e.g. Senior Frontend Developer" />
+          </div>
+          <div class="form-group">
+            <label>Department</label>
+            <select [(ngModel)]="form.department">
+              <option *ngFor="let d of departments" [value]="d">{{ d }}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Status</label>
+            <select [(ngModel)]="form.status">
+              <option value="draft">Draft</option>
+              <option value="open">Open</option>
+              <option value="paused">Paused</option>
+              <option value="closed">Closed</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Location</label>
+            <input type="text" [(ngModel)]="form.location" placeholder="e.g. Paris, Remote" />
+          </div>
+          <div class="form-group">
+            <label>Contract Type</label>
+            <select [(ngModel)]="form.contractType">
+              <option *ngFor="let c of contractTypes" [value]="c">{{ c }}</option>
+            </select>
+          </div>
+          <div class="form-group full">
+            <label>Experience Level</label>
+            <select [(ngModel)]="form.experienceLevel">
+              <option *ngFor="let e of experienceLevels" [value]="e">{{ e }}</option>
+            </select>
+          </div>
+          <div class="form-group full">
+            <label>Description</label>
+            <textarea [(ngModel)]="form.description" rows="4" placeholder="Describe the role and responsibilities..."></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Prerequisites ── -->
+      <div class="form-section">
+        <div class="section-header">
+          <h3 class="section-title">Prerequisites</h3>
+          <button class="btn-add" (click)="addPrerequisite()">+ Add</button>
+        </div>
+        <div class="dynamic-list" *ngIf="form.prerequisites?.length">
+          <div class="dynamic-item" *ngFor="let p of form.prerequisites; let i = index">
+            <select [(ngModel)]="p.type" class="flex-1">
+              <option *ngFor="let t of prereqTypes" [value]="t">{{ t }}</option>
+            </select>
+            <input type="text" [(ngModel)]="p.value" placeholder="Value" class="flex-2" />
+            <label class="checkbox-label">
+              <input type="checkbox" [(ngModel)]="p.obligatory" /> Required
+            </label>
+            <button class="btn-remove" (click)="removePrerequisite(i)">✕</button>
+          </div>
+        </div>
+        <p class="empty-hint" *ngIf="!form.prerequisites?.length">No prerequisites added yet.</p>
+      </div>
+
+      <!-- ── Skills ── -->
+      <div class="form-section">
+        <div class="section-header">
+          <h3 class="section-title">Skills</h3>
+          <button class="btn-add" (click)="addSkill()">+ Add Skill</button>
+        </div>
+        <div class="dynamic-list" *ngIf="form.skills?.length">
+          <div class="dynamic-item" *ngFor="let s of form.skills; let i = index">
+            <input type="text" [(ngModel)]="s.name" placeholder="Skill name" class="flex-2" />
+            <div class="level-picker">
+              <label class="mini-label">Level (1-5)</label>
+              <div class="dot-row">
+                <span class="dot" *ngFor="let d of [1,2,3,4,5]"
+                  [class.filled]="d <= s.minLevel"
+                  (click)="s.minLevel = d"></span>
+              </div>
+            </div>
+            <input type="number" [(ngModel)]="s.weight" placeholder="Weight %" min="0" max="100" class="input-sm" />
+            <label class="checkbox-label">
+              <input type="checkbox" [(ngModel)]="s.obligatory" /> Required
+            </label>
+            <button class="btn-remove" (click)="removeSkill(i)">✕</button>
+          </div>
+        </div>
+        <p class="empty-hint" *ngIf="!form.skills?.length">No skills added yet.</p>
+      </div>
+
+      <!-- ── Technical Tests List ── -->
+      <div class="form-section">
+        <div class="section-header">
+          <h3 class="section-title">Technical Tests</h3>
+          <button class="btn-add" (click)="addTest()">+ Add Test</button>
+        </div>
+        <div class="dynamic-list" *ngIf="form.tests?.length">
+          <div class="dynamic-item" *ngFor="let t of form.tests; let i = index">
+            <input type="text" [(ngModel)]="t.name" placeholder="Test name" class="flex-2" />
+            <select [(ngModel)]="t.type" class="flex-1">
+              <option *ngFor="let tt of testTypes" [value]="tt">{{ tt }}</option>
+            </select>
+            <input type="number" [(ngModel)]="t.duration" placeholder="Duration (min)" class="input-sm" />
+            <input type="number" [(ngModel)]="t.minScore" placeholder="Min score" class="input-sm" />
+            <button class="btn-remove" (click)="removeTest(i)">✕</button>
+          </div>
+        </div>
+        <p class="empty-hint" *ngIf="!form.tests?.length">No tests defined yet.</p>
+      </div>
+
+      <!-- ── Hiring Stages ── -->
+      <div class="form-section">
+        <div class="section-header">
+          <h3 class="section-title">Hiring Stages</h3>
+          <button class="btn-add" (click)="addStage()">+ Add Stage</button>
+        </div>
+        <div class="dynamic-list" *ngIf="form.stages?.length">
+          <div class="dynamic-item" *ngFor="let s of form.stages; let i = index">
+            <input type="text" [(ngModel)]="s.label" placeholder="Stage label (e.g. HR Screen)" class="flex-2" />
+            <input type="text" [(ngModel)]="s.evaluator" placeholder="Evaluator role" class="flex-2" />
+            <button class="btn-remove" (click)="removeStage(i)">✕</button>
+          </div>
+        </div>
+        <p class="empty-hint" *ngIf="!form.stages?.length">No hiring stages defined.</p>
+      </div>
+
+      <!-- ── Test Assignments (RH & Technical) ── -->
+      <div class="form-section">
+        <h3 class="section-title">Test Assignments</h3>
+        <!-- Grille 2 colonnes -->
+        <div class="test-assignment-grid">
+          <!-- RH Test -->
+          <div class="test-assignment-card" [class.active]="rhTest.enabled">
+            <div class="test-assignment-header">
+              <div class="test-assignment-left">
+                <span class="test-assignment-icon">🧠</span>
+                <div>
+                  <div class="test-assignment-label">RH / Psychometric Test</div>
+                  <div class="test-assignment-status">
+                    <span class="test-done-badge" *ngIf="form.tests?.length">✅ Tests exist</span>
+                    <span class="test-pending-badge" *ngIf="rhTest.enabled && !form.tests?.length">⏳ No test defined</span>
+                    <span class="test-off-badge" *ngIf="!rhTest.enabled">— Not assigned</span>
+                  </div>
+                </div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" [(ngModel)]="rhTest.enabled" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="test-assignment-fields" *ngIf="rhTest.enabled">
+              <div class="form-group">
+                <label>Deadline</label>
+                <input type="date" [(ngModel)]="rhTest.deadline" />
+              </div>
+              <div class="form-group">
+                <label>Assigned agents</label>
+                <div class="assignee-chips">
+                  <span class="assignee-chip" *ngFor="let uid of rhTest.assignedTo">
+                    {{ getAgentLabel(uid) }}
+                    <button class="chip-remove" (click)="removeTestAssignee('rh', uid)">✕</button>
+                  </span>
+                </div>
+                <select (change)="addTestAssignee('rh', $event)">
+                  <option value="">+ Add agent…</option>
+                  <option *ngFor="let a of getUnassignedForTest('rh')" [value]="a.id">
+                    {{ a.name ?? a.email }}
+                  </option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Technical Test -->
+          <div class="test-assignment-card" [class.active]="techTest.enabled">
+            <div class="test-assignment-header">
+              <div class="test-assignment-left">
+                <span class="test-assignment-icon">💻</span>
+                <div>
+                  <div class="test-assignment-label">Technical Test</div>
+                  <div class="test-assignment-status">
+                    <span class="test-done-badge" *ngIf="form.tests?.length">✅ Tests exist</span>
+                    <span class="test-pending-badge" *ngIf="techTest.enabled && !form.tests?.length">⏳ No test defined</span>
+                    <span class="test-off-badge" *ngIf="!techTest.enabled">— Not assigned</span>
+                  </div>
+                </div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" [(ngModel)]="techTest.enabled" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="test-assignment-fields" *ngIf="techTest.enabled">
+              <div class="form-group">
+                <label>Deadline</label>
+                <input type="date" [(ngModel)]="techTest.deadline" />
+              </div>
+              <div class="form-group">
+                <label>Assigned agents</label>
+                <div class="assignee-chips">
+                  <span class="assignee-chip" *ngFor="let uid of techTest.assignedTo">
+                    {{ getAgentLabel(uid) }}
+                    <button class="chip-remove" (click)="removeTestAssignee('tech', uid)">✕</button>
+                  </span>
+                </div>
+                <select (change)="addTestAssignee('tech', $event)">
+                  <option value="">+ Add evaluator…</option>
+                  <option *ngFor="let a of getUnassignedForTest('tech')" [value]="a.id">
+                    {{ a.name ?? a.email }}
+                  </option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Interview Assignments (RH & Technical) ── -->
+      <div class="form-section">
+        <h3 class="section-title">Interview Assignments</h3>
+        <!-- Grille 2 colonnes -->
+        <div class="test-assignment-grid">
+          <!-- RH Interview -->
+          <div class="test-assignment-card" [class.active]="rhInterview.enabled">
+            <div class="test-assignment-header">
+              <div class="test-assignment-left">
+                <span class="test-assignment-icon">🗣️</span>
+                <div>
+                  <div class="test-assignment-label">RH Interview</div>
+                  <div class="test-assignment-status">
+                    <span class="test-off-badge" *ngIf="!rhInterview.enabled">— Not assigned</span>
+                  </div>
+                </div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" [(ngModel)]="rhInterview.enabled" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="test-assignment-fields" *ngIf="rhInterview.enabled">
+              <div class="form-group">
+                <label>Deadline</label>
+                <input type="date" [(ngModel)]="rhInterview.deadline" />
+              </div>
+              <div class="form-group">
+                <label>Assigned interviewers</label>
+                <div class="assignee-chips">
+                  <span class="assignee-chip" *ngFor="let uid of rhInterview.assignedTo">
+                    {{ getAgentLabel(uid) }}
+                    <button class="chip-remove" (click)="removeInterviewAssignee('rh', uid)">✕</button>
+                  </span>
+                </div>
+                <select (change)="addInterviewAssignee('rh', $event)">
+                  <option value="">+ Add interviewer…</option>
+                  <option *ngFor="let a of getUnassignedForInterview('rh')" [value]="a.id">
+                    {{ a.name ?? a.email }}
+                  </option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Technical Interview -->
+          <div class="test-assignment-card" [class.active]="techInterview.enabled">
+            <div class="test-assignment-header">
+              <div class="test-assignment-left">
+                <span class="test-assignment-icon">🔧</span>
+                <div>
+                  <div class="test-assignment-label">Technical Interview</div>
+                  <div class="test-assignment-status">
+                    <span class="test-off-badge" *ngIf="!techInterview.enabled">— Not assigned</span>
+                  </div>
+                </div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" [(ngModel)]="techInterview.enabled" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="test-assignment-fields" *ngIf="techInterview.enabled">
+              <div class="form-group">
+                <label>Deadline</label>
+                <input type="date" [(ngModel)]="techInterview.deadline" />
+              </div>
+              <div class="form-group">
+                <label>Assigned interviewers</label>
+                <div class="assignee-chips">
+                  <span class="assignee-chip" *ngFor="let uid of techInterview.assignedTo">
+                    {{ getAgentLabel(uid) }}
+                    <button class="chip-remove" (click)="removeInterviewAssignee('tech', uid)">✕</button>
+                  </span>
+                </div>
+                <select (change)="addInterviewAssignee('tech', $event)">
+                  <option value="">+ Add interviewer…</option>
+                  <option *ngFor="let a of getUnassignedForInterview('tech')" [value]="a.id">
+                    {{ a.name ?? a.email }}
+                  </option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Test Validity Period ── -->
+      <div class="form-section test-period-card">
+        <h3 class="section-title">Test Validity Period</h3>
+        <div class="period-fields">
+          <div class="form-group">
+            <label>Start date</label>
+            <input type="date" [(ngModel)]="form.testPeriod.start" [min]="todayIso" />
+          </div>
+          <div class="form-group">
+            <label>End date</label>
+            <input type="date" [(ngModel)]="form.testPeriod.end" [min]="form.testPeriod.start || todayIso" />
+          </div>
+        </div>
+        <div *ngIf="testPeriodDurationDays !== null" class="period-hint">
+          <span class="material-icons" style="font-size:14px;vertical-align:-2px">info_outline</span>
+          Duration: {{ testPeriodDurationDays }} day(s)
+        </div>
+        <div *ngIf="!testPeriodValid" class="period-error">
+          End date must be after start date.
+        </div>
+      </div>
+
+      <!-- Message d'erreur global -->
+      <div *ngIf="errorMsg" class="submit-error">
+        <span class="material-icons" style="font-size:16px;vertical-align:-2px">error_outline</span>
+        {{ errorMsg }}
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="modal-footer">
+      <button class="btn-secondary" (click)="close()" [disabled]="saving">Cancel</button>
+      <button class="btn-primary" (click)="save()" [disabled]="saving || !form.title">
+        <span *ngIf="!saving">Save Changes</span>
+        <span *ngIf="saving">Saving…</span>
+      </button>
+    </div>
+
+  </div>
+</div>

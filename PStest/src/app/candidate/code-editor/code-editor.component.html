@@ -1,0 +1,199 @@
+<!-- src/app/components/code-editor/code-editor.component.html -->
+<!-- CHANGES: Added #editorTextarea ref, anti-cheat risk badge in topbar -->
+<div class="ce-root">
+
+  <!-- ── Top Bar ── -->
+  <div class="ce-topbar">
+    <div class="ce-topbar-left">
+      <span class="ce-problem-title">{{ problemTitle }}</span>
+      <span class="ce-badge" [ngClass]="difficultyConfig[difficulty].css">
+        {{ difficultyConfig[difficulty].label }}
+      </span>
+    </div>
+    <div class="ce-topbar-right">
+      <!-- Anti-cheat live badge -->
+      <div class="ce-anticheat-badge" [ngClass]="'risk-' + antiCheatRisk" *ngIf="antiCheatCount > 0">
+        <span class="ce-anticheat-icon">⚠</span>
+        <span class="ce-anticheat-label">{{ antiCheatCount }} event{{ antiCheatCount > 1 ? 's' : '' }}</span>
+        <span class="ce-anticheat-risk">{{ antiCheatRisk.toUpperCase() }}</span>
+      </div>
+      <select class="ce-lang-select" [(ngModel)]="language" (change)="onLanguageChange()">
+        <option *ngFor="let l of languages" [value]="l.value">{{ l.label }}</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- ── Layout ── -->
+  <div class="ce-layout">
+
+    <!-- LEFT — Code Area -->
+    <div class="ce-left">
+      <div class="ce-pane-header">Your Solution</div>
+
+      <div class="ce-editor-wrap">
+        <textarea
+          #editorTextarea
+          class="ce-textarea"
+          [(ngModel)]="code"
+          spellcheck="false"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          (keydown.tab)="onTabKey($event)"
+          (input)="onCodeInput()">
+        </textarea>
+      </div>
+
+      <div class="ce-action-bar">
+        <button class="ce-btn-run" [disabled]="running" (click)="runTests()">
+          <span *ngIf="!running" class="ce-run-icon">▶</span>
+          <span *ngIf="running"  class="ce-spinner"></span>
+          {{ running ? 'Running…' : 'Run Tests' }}
+        </button>
+
+        <button
+          class="ce-btn-submit"
+          [disabled]="!allPassed"
+          [class.ce-btn-submit--active]="allPassed"
+          (click)="submitSolution()">
+          Submit Solution
+        </button>
+
+        <span class="ce-hint">Tab = indentation</span>
+      </div>
+    </div>
+
+    <!-- RIGHT — Results Panel -->
+    <div class="ce-right">
+
+      <!-- Tabs -->
+      <div class="ce-tabs">
+        <button class="ce-tab" [class.ce-tab--active]="activeTab === 'tests'" (click)="switchTab('tests')">
+          Test Cases
+          <span class="ce-tab-badge" *ngIf="testResults.length">{{ testResults.length }}</span>
+        </button>
+        <button class="ce-tab" [class.ce-tab--active]="activeTab === 'complexity'" (click)="switchTab('complexity')">
+          Complexity
+        </button>
+        <button class="ce-tab" [class.ce-tab--active]="activeTab === 'console'" (click)="switchTab('console')">
+          Console
+        </button>
+      </div>
+
+      <!-- ── Tests Panel ── -->
+      <div class="ce-panel" [class.ce-panel--active]="activeTab === 'tests'">
+        <div class="ce-test-case" *ngFor="let r of testResults; let i = index; trackBy: trackByIdx">
+          <div class="ce-tc-header">
+            <span class="ce-tc-name">Case {{ i + 1 }}</span>
+            <span class="ce-status" [ngClass]="r.statusClass">{{ r.statusLabel }}</span>
+          </div>
+          <div class="ce-tc-body">
+            <div class="ce-tc-row">
+              <span class="ce-tc-label">Input</span>
+              <code class="ce-tc-val">{{ formatInput(r.input) }}</code>
+            </div>
+            <div class="ce-tc-row">
+              <span class="ce-tc-label">Expected</span>
+              <code class="ce-tc-val ce-tc-val--expected">{{ r.expected | json }}</code>
+            </div>
+            <ng-container *ngIf="r.got !== null || r.status !== 'pending'">
+              <div class="ce-tc-row">
+                <span class="ce-tc-label">Got</span>
+                <code class="ce-tc-val" [class.ce-tc-val--wrong]="!r.pass && r.got !== null">
+                  {{ r.got | json }}
+                </code>
+              </div>
+              <div class="ce-tc-row" *ngIf="r.time !== null">
+                <span class="ce-tc-label">Duration</span>
+                <code class="ce-tc-val">{{ r.time }} ms</code>
+              </div>
+              <div class="ce-tc-row" *ngIf="r.memoryKb">
+                <span class="ce-tc-label">Memory</span>
+                <code class="ce-tc-val">{{ r.memoryKb }} KB</code>
+              </div>
+              <div class="ce-tc-row" *ngIf="r.stderr">
+                <span class="ce-tc-label" style="color:var(--ce-red)">Error</span>
+                <code class="ce-tc-val ce-tc-val--wrong">{{ r.stderr }}</code>
+              </div>
+            </ng-container>
+          </div>
+        </div>
+
+        <div class="ce-empty" *ngIf="!running && allTestsPending">
+          Click "Run Tests" to start.
+        </div>
+      </div>
+
+      <!-- ── Complexity Panel ── -->
+      <div class="ce-panel ce-complexity-panel" [class.ce-panel--active]="activeTab === 'complexity'">
+        <div class="ce-empty" *ngIf="!complexity && !running">
+          Run tests to analyze complexity.
+        </div>
+        <ng-container *ngIf="complexity">
+          <div class="ce-stats-grid">
+            <div class="ce-stat">
+              <div class="ce-stat-label">Tests Passed</div>
+              <div class="ce-stat-value"
+                [class.ce-green]="allPassed"
+                [class.ce-red]="!allPassed">
+                {{ testResults | countPass }}/{{ testResults.length }}
+              </div>
+            </div>
+            <div class="ce-stat">
+              <div class="ce-stat-label">Average Time</div>
+              <div class="ce-stat-value">{{ testResults | avgTime }} ms</div>
+            </div>
+          </div>
+          <div class="ce-complexity-card">
+            <div class="ce-complexity-header">Time Complexity</div>
+            <div class="ce-complexity-notation">{{ complexity.time.notation }}</div>
+            <div class="ce-complexity-note">{{ complexity.time.note }}</div>
+            <div class="ce-bar-wrap">
+              <div class="ce-bar-label">Efficiency: {{ complexity.time.label }}</div>
+              <div class="ce-bar-track">
+                <div class="ce-bar-fill"
+                  [style.width.%]="complexity.time.efficiency"
+                  [style.background]="complexityBarColor(complexity.time.efficiency)">
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="ce-complexity-card">
+            <div class="ce-complexity-header">Space Complexity</div>
+            <div class="ce-complexity-notation">{{ complexity.space.notation }}</div>
+            <div class="ce-complexity-note">{{ complexity.space.note }}</div>
+            <div class="ce-bar-wrap">
+              <div class="ce-bar-label">Memory Efficiency: {{ complexity.space.label }}</div>
+              <div class="ce-bar-track">
+                <div class="ce-bar-fill"
+                  [style.width.%]="complexity.space.efficiency"
+                  [style.background]="complexityBarColor(complexity.space.efficiency)">
+                </div>
+              </div>
+            </div>
+          </div>
+        </ng-container>
+      </div>
+
+      <!-- ── Console Panel ── -->
+      <div class="ce-panel ce-console-panel" [class.ce-panel--active]="activeTab === 'console'">
+        <div class="ce-console">
+          <ng-container *ngIf="consoleLines.length === 0">
+            <span style="color:#666">-- No execution --</span>
+          </ng-container>
+          <ng-container *ngFor="let line of consoleLines">
+            <span [ngClass]="'cl-' + line.type">{{ line.text }}</span>
+            <br>
+          </ng-container>
+        </div>
+      </div>
+
+      <!-- All-passed banner -->
+      <div class="ce-pass-banner" [class.ce-pass-banner--show]="allPassed">
+        <span class="ce-pass-icon">✓</span>
+        All tests passed — you can submit!
+      </div>
+
+    </div>
+  </div>
+</div>

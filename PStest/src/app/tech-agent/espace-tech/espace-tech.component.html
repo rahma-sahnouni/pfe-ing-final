@@ -1,0 +1,109 @@
+<div class="admin-wrapper">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <span class="logo-icon">⚡</span>
+      <span class="logo-text">NexGen <strong>AI</strong></span>
+    </div>
+
+<nav class="sidebar-nav">
+  <a class="nav-item" routerLink="dashboard" routerLinkActive="active">
+    <i class="icon">▦</i> Dashboard
+  </a>
+
+  <a routerLink="candidates" routerLinkActive="active" class="nav-item">
+    <i class="fa-solid fa-users nav-icon"></i>
+    <span>Jobs Overview</span>
+  </a>
+
+  <a class="nav-item" routerLink="jobs" routerLinkActive="active"
+     (click)="onNavClick(['TECH_TEST_ASSIGNMENT'])">
+    <i class="fa-solid fa-briefcase nav-icon"></i>
+    <span>Test Management</span>
+    <span class="badge" *ngIf="testManagementBadge > 0">{{ testManagementBadge }}</span>
+  </a>
+
+
+  <a routerLink="interview-scheduler" routerLinkActive="active" class="nav-item"
+     (click)="onNavClick(['TECH_INTERVIEW_ASSIGNMENT'])">
+    <i class="fa-solid fa-calendar-alt nav-icon"></i>
+    <span>Interview Scheduler</span>
+    <span class="badge" *ngIf="interviewSchedulerBadge > 0">{{ interviewSchedulerBadge }}</span>
+  </a>
+</nav>
+
+  <div class="nav-bottom">
+  <a (click)="logout()" class="nav-item">
+    <span class="nav-icon">⚙</span>
+    <span>log out</span>
+  </a>
+</div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <header class="topbar">
+      <div class="topbar-left"></div>
+      <div class="topbar-right">
+
+        <!-- ── Cloche notifications ── -->
+        <div class="notif-wrapper">
+          <button class="icon-btn notif-bell" (click)="toggleNotifications()">
+            🔔
+          <ng-container *ngIf="notifService.unreadCount$ | async as unreadCount">
+  <span class="notif-badge" *ngIf="unreadCount > 0">{{ unreadCount }}</span>
+</ng-container>
+          </button>
+
+          <!-- Dropdown -->
+          <div class="notif-dropdown" *ngIf="showNotifications">
+            <div class="notif-dropdown-header">
+              <span>Notifications</span>
+              <span class="notif-count">{{ (notifService.notifications$ | async)?.length || 0 }}</span>
+            </div>
+
+            <div class="notif-list">
+              <ng-container *ngIf="(notifService.notifications$ | async) as notifs">
+
+                <div *ngIf="notifs.length === 0" class="notif-empty">
+                  Aucune notification
+                </div>
+
+                <div *ngFor="let n of notifs"
+                     class="notif-item"
+                     [class.unread]="!n.read">
+                  <span class="notif-type-icon">
+                    {{ n.type === 'RH_TEST_ASSIGNMENT' ? '👥' : '💻' }}
+                  </span>
+                  <div class="notif-body">
+                    <p class="notif-message">{{ n.message }}</p>
+                    <small class="notif-time">{{ n.createdAt | date:'dd/MM/yyyy HH:mm' }}</small>
+                  </div>
+                </div>
+
+              </ng-container>
+            </div>
+          </div>
+        </div>
+        <!-- ── fin notifications ── -->
+
+        <button class="icon-btn" (click)="toggleTheme()">
+          {{ isDarkMode ? '☀' : '🌙' }}
+        </button>
+
+        <div class="user-info" *ngIf="currentUser">
+          <div class="user-avatar">{{ currentUser.email?.charAt(0)?.toUpperCase() }}</div>
+          <div>
+            <div class="user-name">{{ currentUser.email }}</div>
+            <div class="user-role">{{ currentUser.role }}</div>
+          </div>
+        </div>
+      </div>
+    </header>
+  <app-session-expired-modal></app-session-expired-modal>
+
+    <div class="page-content">
+      <router-outlet></router-outlet>
+    </div>
+  </main>
+</div>

@@ -1,0 +1,18 @@
+<div class="modal-backdrop" (click)="close()">
+  <div class="confirm-panel" (click)="$event.stopPropagation()">
+    <div class="confirm-icon">🗑</div>
+    <h3 class="confirm-title">Delete Job Offer</h3>
+    <p class="confirm-body">
+      Are you sure you want to delete <strong>{{ job.title }}</strong>?
+      This action cannot be undone.
+    </p>
+    <div class="confirm-footer">
+      <button class="btn-cancel" (click)="close()" [disabled]="deleting">Cancel</button>
+      <button class="btn-delete" (click)="confirm()" [disabled]="deleting">
+        <span *ngIf="!deleting">Delete Job</span>
+        <span *ngIf="deleting">Deleting…</span>
+      </button>
+    </div>
+    <p class="error-msg" *ngIf="errorMsg">{{ errorMsg }}</p>
+  </div>
+</div>

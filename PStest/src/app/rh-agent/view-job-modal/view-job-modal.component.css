@@ -1,0 +1,576 @@
+/* ─────────────────────────
+   BACKDROP
+───────────────────────── */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn .2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity:0 }
+  to { opacity:1 }
+}
+
+/* ─────────────────────────
+   PANEL
+───────────────────────── */
+
+.modal-panel {
+  background: #161821;
+  border-radius: 16px;
+  width: 680px;
+  max-width: 95vw;
+  max-height: 88vh;
+
+  display: flex;
+  flex-direction: column;
+
+  box-shadow: 0 30px 100px rgba(0,0,0,0.6);
+
+  animation: slideUp .25s cubic-bezier(.16,1,.3,1);
+  overflow: hidden;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(24px); opacity:0 }
+  to { transform: translateY(0); opacity:1 }
+}
+
+/* ─────────────────────────
+   HEADER
+───────────────────────── */
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+
+  padding: 28px 32px 20px;
+
+  border-bottom: 1px solid #2a2d3a;
+}
+
+.modal-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+
+  color: #7b8198;
+
+  margin-bottom: 6px;
+}
+
+.modal-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #f3f4f7;
+  margin-bottom: 10px;
+}
+
+.header-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ─────────────────────────
+   CLOSE BUTTON
+───────────────────────── */
+
+.close-btn {
+  background: #2a2d3a;
+  border: none;
+  border-radius: 8px;
+
+  width: 34px;
+  height: 34px;
+
+  font-size: 14px;
+  cursor: pointer;
+
+  color: #c7c9d3;
+
+  transition: all .15s;
+}
+
+.close-btn:hover {
+  background: #343748;
+}
+
+/* ─────────────────────────
+   BODY
+───────────────────────── */
+
+.modal-body {
+  overflow-y: auto;
+  padding: 24px 32px;
+
+  flex: 1;
+
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ─────────────────────────
+   META ROW
+───────────────────────── */
+
+.meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+
+  padding: 16px;
+
+  background: #1d2030;
+  border-radius: 10px;
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  font-size: 13px;
+  color: #c7c9d3;
+}
+
+.meta-icon {
+  font-size: 15px;
+}
+
+/* ─────────────────────────
+   SECTIONS
+───────────────────────── */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.section-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+
+  letter-spacing: .07em;
+
+  color: #7b8198;
+}
+
+.description-text {
+  font-size: 14px;
+  line-height: 1.65;
+
+  color: #d6d7df;
+
+  white-space: pre-wrap;
+}
+
+/* ─────────────────────────
+   TAGS
+───────────────────────── */
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  padding: 5px 10px;
+  border-radius: 20px;
+
+  font-size: 12px;
+}
+
+.tag--prereq {
+  background: #1e2240;
+  color: #a5b4fc;
+
+  border: 1px solid #3f45a0;
+}
+
+.tag-mandatory {
+  background: #4b1d1d;
+  color: #fca5a5;
+
+  font-size: 10px;
+  font-weight: 700;
+
+  padding: 2px 6px;
+
+  border-radius: 10px;
+}
+
+/* ─────────────────────────
+   SKILLS
+───────────────────────── */
+
+.skills-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill,minmax(180px,1fr));
+  gap: 10px;
+}
+
+.skill-card {
+  padding: 12px;
+
+  border: 1px solid #2a2d3a;
+  border-radius: 10px;
+
+  background: #1c1f2c;
+
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.skill-name {
+  font-size: 13px;
+  font-weight: 600;
+
+  color: #f3f4f7;
+}
+
+.skill-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.skill-level {
+  display: flex;
+  gap: 3px;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+
+  border-radius: 50%;
+
+  background: #343748;
+}
+
+.dot.filled {
+  background: #818cf8;
+}
+
+.skill-weight {
+  font-size: 11px;
+  color: #8a90a6;
+}
+
+/* ─────────────────────────
+   TESTS
+───────────────────────── */
+
+.test-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.test-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  padding: 10px 14px;
+
+  border: 1px solid #2a2d3a;
+  border-radius: 8px;
+
+  background: #1c1f2c;
+
+  font-size: 13px;
+}
+
+.test-name {
+  font-weight: 600;
+  color: #f3f4f7;
+  flex: 1;
+}
+
+.test-type {
+  background: #163829;
+  color: #34d399;
+
+  border: 1px solid #1f5d42;
+
+  padding: 2px 8px;
+  border-radius: 20px;
+
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.test-detail {
+  font-size: 12px;
+  color: #8a90a6;
+}
+
+/* ─────────────────────────
+   STAGES
+───────────────────────── */
+
+.stages-track {
+  display: flex;
+  flex-direction: column;
+}
+
+.stage-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+
+  position: relative;
+}
+
+.stage-number {
+  width: 30px;
+  height: 30px;
+
+  border-radius: 50%;
+
+  background: #6366f1;
+  color: #fff;
+
+  font-size: 13px;
+  font-weight: 700;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stage-info {
+  padding: 4px 0 20px;
+}
+
+.stage-label {
+  font-size: 14px;
+  font-weight: 600;
+
+  color: #f3f4f7;
+}
+
+.stage-eval {
+  font-size: 12px;
+  color: #8a90a6;
+}
+
+.stage-connector {
+  position: absolute;
+
+  left: 14px;
+  top: 30px;
+
+  width: 2px;
+  height: calc(100% - 10px);
+
+  background: #343748;
+}
+
+/* ─────────────────────────
+   FOOTER
+───────────────────────── */
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+
+  padding: 18px 32px;
+
+  border-top: 1px solid #2a2d3a;
+}
+
+/* ─────────────────────────
+   BUTTONS
+───────────────────────── */
+
+.btn-secondary {
+  padding: 9px 20px;
+
+  border-radius: 8px;
+
+  border: 1px solid #343748;
+
+  background: #202332;
+
+  color: #d6d7df;
+
+  font-size: 14px;
+  font-weight: 500;
+
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background: #2a2d3a;
+}
+
+.btn-primary {
+  padding: 9px 20px;
+
+  border-radius: 8px;
+
+  border: none;
+
+  background: #6366f1;
+  color: #fff;
+
+  font-size: 14px;
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  background: #4f46e5;
+}
+
+/* ─────────────────────────
+   STATUS BADGES
+───────────────────────── */
+
+.status-badge {
+  padding: 3px 10px;
+  border-radius: 20px;
+
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.status-badge.draft {
+  background:#1e2240;
+  color:#a5b4fc;
+}
+
+.status-badge.open {
+  background:#163829;
+  color:#34d399;
+}
+
+.status-badge.paused {
+  background:#3b2c12;
+  color:#fbbf24;
+}
+
+.status-badge.closed {
+  background:#4b1d1d;
+  color:#fca5a5;
+}
+
+/* ─────────────────────────
+   DEPARTMENT BADGES
+───────────────────────── */
+
+.dept-badge {
+  padding: 3px 10px;
+  border-radius: 20px;
+
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.dept-badge.engineering { background:#2e1a4d; color:#c4b5fd; }
+.dept-badge.design { background:#4d1a33; color:#f9a8d4; }
+.dept-badge.people { background:#163829; color:#6ee7b7; }
+.dept-badge.marketing { background:#4a2b0d; color:#fdba74; }
+.dept-badge.finance { background:#1e3a5f; color:#93c5fd; }
+
+
+/* ── Test Assignment Status ── */
+.test-status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.test-status-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1.5px solid #e5e7eb;
+  background: #f9fafb;
+  transition: border-color 0.2s;
+}
+
+.test-status-card.done {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.test-status-card.pending {
+  border-color: #fcd34d;
+  background: #fffbeb;
+}
+
+.test-status-card.disabled {
+  opacity: 0.55;
+}
+
+.test-status-icon {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.test-status-label {
+  font-weight: 600;
+  font-size: 13.5px;
+  color: #111827;
+  margin-bottom: 3px;
+}
+
+.test-status-state {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.done-label   { color: #16a34a; font-weight: 500; }
+.pending-label { color: #b45309; font-weight: 500; }
+
+.test-status-assignees {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.assignee-label {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-right: 2px;
+}
+
+.assignee-id {
+  font-size: 11px;
+  background: #e0e7ff;
+  color: #4338ca;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-family: monospace;
+}

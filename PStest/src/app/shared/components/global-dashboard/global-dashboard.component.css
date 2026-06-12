@@ -1,0 +1,470 @@
+/* global-dashboard.component.scss
+   Matches the NexGen AI screenshot exactly:
+   – White content panel, #f9fafb metric cards with thin border
+   – Inter font, tight letter-spacing on section labels
+   – Pipeline: colored 4px top bar, centered counts, thin ">" arrows
+   – Job / submission cards: 1px #e5e7eb border, padded rows
+   – Green rounded pill badges matching screenshot
+*/
+
+/* ── Root ── */
+.dashboard-root {
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  background: #ffffff;
+  color: #111827;
+  padding: 2rem 2.5rem;
+  min-height: 100%;
+  box-sizing: border-box;
+}
+
+/* ── Header ── */
+.db-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 1.75rem;
+}
+
+.db-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 4px;
+  letter-spacing: -0.3px;
+}
+
+.db-subtitle {
+  font-size: 13px;
+  color: #9ca3af;
+  margin: 0;
+  font-weight: 400;
+}
+
+.db-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.live-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
+.btn-reload {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #9ca3af;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+
+  &:hover {
+    color: #374151;
+    background: #f3f4f6;
+  }
+
+  .material-icons { font-size: 18px; }
+}
+
+/* ── Loading / Error ── */
+.db-loading,
+.db-error {
+  padding: 3rem 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: #9ca3af;
+  justify-content: center;
+}
+
+.db-error { color: #ef4444; }
+
+.spin { animation: spin 0.9s linear infinite; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Section ── */
+.db-section {
+  margin-bottom: 2rem;
+}
+
+.section-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin: 0 0 0.875rem;
+}
+
+.divider {
+  height: 1px;
+  background: #f3f4f6;
+  margin: 0 0 1.75rem;
+}
+
+/* ── KEY METRICS ── */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+
+  @media (max-width: 900px) { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 560px) { grid-template-columns: 1fr 1fr; }
+}
+
+.metric-card {
+  background: #f9fafb;
+  border: 1px solid #f0f0f0;
+  border-radius: 10px;
+  padding: 1.125rem 1.25rem 1rem;
+}
+
+.metric-label {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 400;
+  margin: 0 0 6px;
+}
+
+.metric-value {
+  font-size: 28px;
+  font-weight: 500;
+  color: #111827;
+  margin: 0 0 4px;
+  line-height: 1.1;
+  letter-spacing: -0.5px;
+}
+
+.metric-delta {
+  font-size: 12px;
+  margin: 0;
+
+  &.up      { color: #22c55e; }
+  &.down    { color: #ef4444; }
+  &.neutral { color: #9ca3af; }
+}
+
+/* ── PIPELINE ── */
+.pipeline {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.pipe-stage {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  border-right: 1px solid #e5e7eb;
+
+  &:last-child { border-right: none; }
+}
+
+.pipe-bar {
+  height: 4px;
+  width: 100%;
+}
+
+.pipe-inner {
+  padding: 1rem 0.5rem 0.875rem;
+  text-align: center;
+}
+
+.pipe-count {
+  font-size: 24px;
+  font-weight: 500;
+  margin: 0 0 4px;
+  line-height: 1;
+  letter-spacing: -0.5px;
+}
+
+.pipe-name {
+  font-size: 11px;
+  color: #9ca3af;
+  margin: 0;
+}
+
+.pipe-arrow {
+  position: absolute;
+  right: -9px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+  background: #ffffff;
+  padding: 2px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+
+  svg { color: #d1d5db; }
+}
+
+/* ── TWO-COLUMN ── */
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+
+  @media (max-width: 640px) { grid-template-columns: 1fr; }
+}
+
+/* ── CARD ── */
+.card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 0;
+  overflow: hidden;
+  min-height: 160px;
+}
+
+/* ── JOB ROWS ── */
+.job-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem 1.125rem;
+  border-bottom: 1px solid #f3f4f6;
+
+  &:last-child { border-bottom: none; }
+}
+
+.job-info { flex: 1; min-width: 0; }
+
+.job-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #111827;
+  margin: 0 0 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.job-dept {
+  font-size: 12px;
+  color: #9ca3af;
+  margin: 0;
+}
+
+/* ── SUBMISSION ROWS ── */
+.sub-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0.75rem 1.125rem;
+  border-bottom: 1px solid #f3f4f6;
+
+  &:last-child { border-bottom: none; }
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.sub-info { flex: 1; min-width: 0; }
+
+.sub-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #111827;
+  margin: 0 0 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sub-meta {
+  font-size: 11px;
+  color: #9ca3af;
+  margin: 0 0 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.score-bar-wrap {
+  width: 100%;
+  height: 3px;
+  background: #f3f4f6;
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.score-bar-fill {
+  height: 3px;
+  border-radius: 99px;
+  transition: width 0.5s ease;
+}
+
+.sub-score {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  flex-shrink: 0;
+  min-width: 32px;
+  text-align: right;
+}
+
+/* ── BADGES — matching the screenshot green pill exactly ── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 99px;
+  white-space: nowrap;
+  text-transform: lowercase;
+  line-height: 1.4;
+}
+
+.badge-open   { background: #dcfce7; color: #16a34a; }
+.badge-paused { background: #fef9c3; color: #a16207; }
+.badge-draft  { background: #f3f4f6; color: #6b7280; }
+.badge-closed { background: #fee2e2; color: #dc2626; }
+.badge-sub    { background: #dbeafe; color: #1d4ed8; }
+.badge-eval   { background: #dcfce7; color: #16a34a; }
+.badge-rev    { background: #fef9c3; color: #a16207; }
+
+/* ── PROCESS STEPS ── */
+.process-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+
+  @media (max-width: 700px) { grid-template-columns: 1fr 1fr; }
+  @media (max-width: 440px) { grid-template-columns: 1fr; }
+}
+
+.process-item {
+  padding: 0.875rem 1rem;
+  background: #f9fafb;
+  border: 1px solid #f0f0f0;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.process-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.process-info { flex: 1; min-width: 0; }
+
+.process-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #111827;
+  margin: 0 0 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.process-desc {
+  font-size: 11px;
+  color: #9ca3af;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.process-count {
+  font-size: 18px;
+  font-weight: 600;
+  flex-shrink: 0;
+  letter-spacing: -0.3px;
+}
+
+/* ── STATUS BREAKDOWN ── */
+.status-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.status-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.status-bar-wrap {
+  width: 100%;
+  height: 6px;
+  background: #f3f4f6;
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.status-bar-fill {
+  height: 6px;
+  border-radius: 99px;
+  transition: width 0.6s ease;
+}
+
+.status-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.status-num {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+/* ── EMPTY STATE ── */
+.empty-state {
+  font-size: 13px;
+  color: #d1d5db;
+  text-align: center;
+  padding: 2.5rem 1rem;
+  margin: 0;
+}

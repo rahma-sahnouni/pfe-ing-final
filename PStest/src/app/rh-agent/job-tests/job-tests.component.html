@@ -1,0 +1,219 @@
+<div class="jt-page">
+
+  <!-- Header -->
+  <div class="jt-header">
+    <div>
+      <h1 class="jt-title">Job Tests</h1>
+      <p class="jt-subtitle">Configure psychometric assessments for your hiring pipeline.</p>
+    </div>
+  </div>
+
+  <!-- ══ MISSED DEADLINES BANNER ══════════════════════════════════════════ -->
+  <div class="deadline-banner missed-banner"
+       *ngIf="showMissedBanner && missedDeadlineCards.length">
+    <div class="banner-icon-wrap">
+      <span class="material-icons banner-icon">warning</span>
+    </div>
+    <div class="banner-body">
+      <div class="banner-title">
+        {{ missedDeadlineCards.length }} missed deadline{{ missedDeadlineCards.length !== 1 ? 's' : '' }}
+      </div>
+      <div class="banner-list">
+        <span class="banner-chip missed-chip"
+              *ngFor="let c of missedDeadlineCards"
+              (click)="createTest(c)">
+          <span class="material-icons" style="font-size:13px">error_outline</span>
+          {{ c.jobTitle }}
+          <span class="chip-date">· {{ deadlineDate(c) }}</span>
+        </span>
+      </div>
+      <div class="banner-hint">
+        These jobs passed their test-creation deadline. Create the test now to unblock candidates.
+      </div>
+    </div>
+    <button class="banner-close" (click)="showMissedBanner = false">✕</button>
+  </div>
+
+  <!-- ══ UPCOMING DEADLINES BANNER ════════════════════════════════════════ -->
+  <div class="deadline-banner upcoming-banner"
+       *ngIf="showUpcomingBanner && upcomingDeadlineCards.length">
+    <div class="banner-icon-wrap">
+      <span class="material-icons banner-icon">schedule</span>
+    </div>
+    <div class="banner-body">
+      <div class="banner-title">
+        Upcoming test deadline{{ upcomingDeadlineCards.length !== 1 ? 's' : '' }}
+      </div>
+      <div class="banner-list">
+        <span class="banner-chip"
+              *ngFor="let c of upcomingDeadlineCards"
+              [class.critical-chip]="c.deadlineUrgency === 'critical'"
+              [class.soon-chip]="c.deadlineUrgency === 'soon'"
+              (click)="createTest(c)">
+          <span class="material-icons" style="font-size:13px">timelapse</span>
+          {{ c.jobTitle }}
+          <span class="chip-date">· {{ deadlineLabel(c) }}</span>
+        </span>
+      </div>
+      <div class="banner-hint">
+        Create the psychometric test before the deadline to keep your pipeline on track.
+      </div>
+    </div>
+    <button class="banner-close" (click)="showUpcomingBanner = false">✕</button>
+  </div>
+
+  <!-- Stats row -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <span class="stat-icon material-icons">description</span>
+      <div>
+        <div class="stat-label">TOTAL TESTS</div>
+        <div class="stat-value">{{ totalTests }}</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <span class="stat-icon material-icons active-icon">check_circle</span>
+      <div>
+        <div class="stat-label">ACTIVE TESTS</div>
+        <div class="stat-value">{{ activeTests }}</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <span class="stat-icon material-icons draft-icon">edit_note</span>
+      <div>
+        <div class="stat-label">DRAFTS</div>
+        <div class="stat-value">{{ draftTests }}</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <span class="stat-icon material-icons cand-icon">group</span>
+      <div>
+        <div class="stat-label">CANDIDATES TESTED</div>
+        <div class="stat-value">{{ candidatesTested }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="jt-toolbar">
+    <div class="search-wrap">
+      <span class="material-icons search-icon">search</span>
+      <input class="search-input" [(ngModel)]="searchQuery"
+             placeholder="Search by job title or test name..." />
+    </div>
+    <div class="filter-tabs">
+      <button [class.active]="filterStatus==='all'"      (click)="filterStatus='all'">All</button>
+      <button [class.active]="filterStatus==='active'"   (click)="filterStatus='active'">Active</button>
+      <button [class.active]="filterStatus==='draft'"    (click)="filterStatus='draft'">Draft</button>
+      <button [class.active]="filterStatus==='archived'" (click)="filterStatus='archived'">Archived</button>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div *ngIf="loading" class="loading-wrap">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- Cards grid -->
+  <div *ngIf="!loading" class="cards-grid">
+    <div *ngFor="let card of filtered"
+         class="test-card"
+         [class.card-missed]="card.deadlineUrgency === 'missed'"
+         [class.card-critical]="card.deadlineUrgency === 'critical'"
+         [class.card-soon]="card.deadlineUrgency === 'soon'">
+
+      <!-- Status badge -->
+      <div class="card-status-row">
+        <span class="status-badge" [ngClass]="card.status">
+          <span class="dot"></span>{{ card.status | uppercase }}
+        </span>
+        <button class="icon-btn" title="Delete" *ngIf="card.hasTest">
+          <span class="material-icons">delete</span>
+        </button>
+      </div>
+
+      <!-- ── DEADLINE BADGE (only for cards without a test yet) ── -->
+      <div class="deadline-badge"
+           *ngIf="!card.hasTest && card.deadline"
+           [ngClass]="'badge-' + card.deadlineUrgency">
+        <span class="material-icons deadline-badge-icon">
+          {{ card.deadlineUrgency === 'missed' ? 'warning' : 'schedule' }}
+        </span>
+        <span class="deadline-badge-text">{{ deadlineLabel(card) }}</span>
+        <span class="deadline-badge-date">· {{ deadlineDate(card) }}</span>
+      </div>
+
+      <!-- Card body -->
+      <div class="card-icon material-icons">description</div>
+      <div class="card-job-title">{{ card.jobTitle }}</div>
+      <div class="card-dept">{{ card.department }}</div>
+
+      <div class="card-test-name" *ngIf="card.hasTest">{{ card.testName }}</div>
+      <div class="card-desc" *ngIf="card.hasTest">{{ card.department }}</div>
+
+      <div class="card-tags" *ngIf="card.hasTest">
+        <span class="tag theme-tag">{{ card.themeCount }} THEME{{ card.themeCount !== 1 ? 'S' : '' }}</span>
+        <span class="tag q-tag">{{ card.questionCount }} QUESTIONS</span>
+        <span class="tag cand-tag" *ngIf="card.candidateCount">{{ card.candidateCount }} CANDIDATES</span>
+      </div>
+
+      <div class="card-tags" *ngIf="!card.hasTest">
+        <p class="no-tests-message">You haven't configured any psychometric assessment for this job.</p>
+      </div>
+
+      <ng-container *ngIf="card.hasTest && card.completionRate">
+        <div class="completion-label">
+          COMPLETION RATE <span>{{ card.completionRate }}%</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" [style.width.%]="card.completionRate"></div>
+        </div>
+      </ng-container>
+
+      <!-- CTA -->
+      <button class="btn-configure" (click)="configure(card)" *ngIf="card.hasTest">
+        <span class="material-icons">settings</span> Configure Test
+      </button>
+      <button class="btn-create"
+              (click)="createTest(card)"
+              *ngIf="!card.hasTest"
+              [class.btn-create-urgent]="card.deadlineUrgency === 'critical' || card.deadlineUrgency === 'missed'">
+        <span class="material-icons">add_circle</span> Create Test
+      </button>
+
+      <button class="btn-results" (click)="viewResults(card)" *ngIf="card.hasTest">
+        <span class="material-icons">bar_chart</span> View Results
+      </button>
+    </div>
+
+    <!-- New test card -->
+    <div class="test-card new-card" routerLink="/rh/job-tests/new">
+      <span class="material-icons new-icon">add</span>
+      <p>New Job Test</p>
+      <small>Launch a psychometric evaluation for an open role</small>
+    </div>
+  </div>
+</div>
+
+<!-- ══ No Results Modal ══ -->
+<div class="nr-backdrop" *ngIf="showNoResultsModal" (click)="closeNoResultsModal()">
+  <div class="nr-modal" (click)="$event.stopPropagation()">
+    <button class="nr-close" (click)="closeNoResultsModal()">✕</button>
+    <div class="nr-icon">
+      <span class="material-icons">inbox</span>
+    </div>
+    <h3 class="nr-title">No Results Yet</h3>
+    <p class="nr-desc">
+      No candidates have submitted a test for
+      <strong>{{ pendingCard?.jobTitle }}</strong> yet.
+      Make sure the test is active and shared with candidates.
+    </p>
+    <div class="nr-actions">
+      <button class="nr-btn-secondary" (click)="closeNoResultsModal()">Close</button>
+      <button class="nr-btn-primary" (click)="goToConfigure()">
+        <span class="material-icons">settings</span>
+        Configure Test
+      </button>
+    </div>
+  </div>
+</div>
