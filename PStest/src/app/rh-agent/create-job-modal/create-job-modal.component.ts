@@ -9,9 +9,18 @@ export interface TechnicalTest {
 export interface Prerequisite {
   id: number; icon: string; type: string; value: string;
   role?: string; obligatory: boolean; customLabel?: string;
+  values: string[];
+  extraOptions: string[];
+  weight: number;
 }
 export interface Skill {
-  id: number; name: string; minLevel: number; weight: number; obligatory: boolean;
+  id: number; name: string; minLevel: number; weight: number;
+  obligatory: boolean; type: 'hard' | 'soft';
+}
+export interface GlobalWeights {
+  prerequisites: number;
+  hardSkills:    number;
+  softSkills:    number;
 }
 export interface HiringStage {
   id: number; label: string; evaluator: string;
@@ -24,7 +33,11 @@ export interface TestPeriod {
 export interface NewJobForm {
   title: string; department: string; location: string;
   contractType: string; experienceLevel: string; description: string;
-  prerequisites: Prerequisite[]; skills: Skill[];
+  prerequisites: Prerequisite[];
+  skills: Skill[];
+  globalWeights: GlobalWeights;
+  skillsWeight:     number;
+  hardSkillsWeight: number;
   tests: TechnicalTest[]; stages: HiringStage[];
   testAssignments: {
     rhTest:        { enabled: boolean; assignedTo: string[]; deadline: string | null };
@@ -51,11 +64,12 @@ export class CreateJobModalComponent implements OnInit {
   isSubmitting  = false;
   submitError:  string | null = null;
 
-  customMode: Record<string | number, string> = {
-    1: 'AWS Certified Developer – Associate',
-    2: 'English (C1 – Advanced)',
-    '3_role': '',
-  };
+  stepError:      string | null = null;
+  showStep1Errors = false;
+
+  addingOption:   Record<number, boolean> = {};
+  newOptionText:  Record<number, string>  = {};
+  customMode:     Record<string, string>  = {};
 
   totalSteps = 5;
   steps = [
@@ -78,15 +92,19 @@ export class CreateJobModalComponent implements OnInit {
     testPeriod: { start: null, end: null },
     title: '', department: 'Engineering', location: '',
     contractType: 'Full-time', experienceLevel: 'Mid-level (3-5 years)', description: '',
+    globalWeights: { prerequisites: 30, hardSkills: 50, softSkills: 20 },
+    skillsWeight:     70,
+    hardSkillsWeight: 60,
     prerequisites: [
-      { id: 1, icon: 'verified', type: 'Certification', value: 'AWS Certified Developer – Associate', obligatory: true },
-      { id: 2, icon: 'translate', type: 'Language',      value: 'English (C1 – Advanced)',            obligatory: true },
-      { id: 3, icon: 'work',      type: 'Experience',    value: '5', role: '',                         obligatory: true },
+      { id: 1, icon: 'verified',  type: 'Certification', value: 'AWS Certified Developer – Associate', obligatory: true,  values: ['AWS Certified Developer – Associate'], extraOptions: [], weight: 40 },
+      { id: 2, icon: 'translate', type: 'Language',      value: 'English (C1 – Advanced)',            obligatory: true,  values: ['English (C1 – Advanced)'],            extraOptions: [], weight: 35 },
+      { id: 3, icon: 'work',      type: 'Experience',    value: '5',                                   obligatory: true,  values: [],                                      extraOptions: [], weight: 25, role: '' },
     ],
     skills: [
-      { id: 1, name: 'Angular',         minLevel: 3, weight: 25, obligatory: true  },
-      { id: 2, name: 'TypeScript',      minLevel: 4, weight: 20, obligatory: true  },
-      { id: 3, name: 'REST API Design', minLevel: 3, weight: 15, obligatory: false },
+      { id: 1, name: 'Angular',       minLevel: 3, weight: 50, obligatory: true,  type: 'hard' },
+      { id: 2, name: 'TypeScript',    minLevel: 4, weight: 50, obligatory: true,  type: 'hard' },
+      { id: 3, name: 'Communication', minLevel: 3, weight: 60, obligatory: false, type: 'soft' },
+      { id: 4, name: 'Teamwork',      minLevel: 3, weight: 40, obligatory: false, type: 'soft' },
     ],
     tests: [
       { id: 1, name: 'JavaScript & TypeScript Fundamentals', type: 'MCQ', duration: 30, minScore: 70 },
@@ -98,8 +116,8 @@ export class CreateJobModalComponent implements OnInit {
     ],
   };
 
-  /* ─── Dropdown Options ─── */
-  prereqTypes  = ['Certification', 'Language', 'Experience', 'Education', 'Location', 'Custom'];
+  /* ─── Dropdown options ─── */
+  prereqTypes  = ['Education', 'Language', 'Certification', 'Experience', 'Location', 'Custom'];
   prereqIcons: Record<string, string> = {
     Certification: 'verified', Language: 'translate', Experience: 'work',
     Education: 'school', Location: 'location_on', Custom: 'tune',
@@ -156,53 +174,44 @@ export class CreateJobModalComponent implements OnInit {
   expOptions       = ['Junior (0-2 years)', 'Mid-level (3-5 years)', 'Senior (5-8 years)', 'Lead / Staff (8+ years)', 'Principal / Architect'];
   testTypes        = ['MCQ', 'Coding Challenge', 'Case Study', 'Live Coding', 'System Design', 'Take-Home Project'];
 
-  suggestedSkills: Record<string, string[]> = {
-    Engineering: [
-      'JavaScript / TypeScript', 'Python', 'Java', 'Go', 'Rust', 'C++', 'Node.js', 'React', 'Angular', 'Vue.js',
-      'Next.js', 'NestJS', 'Spring Boot', 'Django / FastAPI', 'GraphQL', 'REST API Design', 'PostgreSQL',
-      'MongoDB', 'Redis', 'Docker', 'Kubernetes', 'CI/CD (GitHub Actions / GitLab CI)', 'AWS / GCP / Azure',
-      'Terraform', 'Microservices Architecture', 'System Design', 'Algorithm & Data Structures',
-    ],
-    Data: [
-      'Python (pandas / NumPy)', 'SQL (advanced)', 'Apache Spark', 'dbt', 'Airflow', 'Kafka',
-      'Tableau / Power BI', 'Machine Learning (scikit-learn)', 'Deep Learning (PyTorch / TensorFlow)',
-      'Statistics & Probability', 'Data Warehousing (Snowflake / BigQuery)', 'ETL Pipeline Design',
-    ],
-    Security: [
-      'Penetration Testing', 'SIEM / SOC Tools', 'Network Security', 'OWASP Top 10', 'Cryptography',
-      'Incident Response', 'Cloud Security (AWS / Azure)', 'Zero Trust Architecture',
-    ],
-    Design: [
-      'Figma', 'Design Systems', 'User Research', 'Prototyping', 'Accessibility (WCAG)',
-      'Motion Design', 'Illustration', 'Adobe Creative Suite',
-    ],
-  };
-
-  testNameSuggestions: Record<string, string[]> = {
-    'MCQ': [
-      'JavaScript & TypeScript Fundamentals', 'System Design Concepts', 'Cloud & DevOps Knowledge',
-      'Algorithms & Data Structures', 'Security Best Practices', 'Database & SQL Knowledge',
-      'Agile & Scrum Methodology',
-    ],
-    'Coding Challenge': [
-      'Algorithmic Problem Solving (LeetCode-style)', 'API Integration Challenge', 'Refactoring Legacy Code',
-      'Build a REST API (Node.js)', 'Data Pipeline Implementation', 'Frontend Component Challenge',
-    ],
-    'Case Study': [
-      'Architecture Design Review', 'Product Strategy Analysis', 'Incident Post-Mortem Analysis',
-      'Security Audit Case Study',
-    ],
-    'Live Coding': [
-      'Pair Programming Session', 'Debugging & Code Review', 'Live Frontend Implementation',
-      'Live SQL Query Optimization',
-    ],
-    'System Design': [
-      'Design a Scalable URL Shortener', 'Design a Real-Time Chat System', 'Design a CI/CD Pipeline',
-      'Design a Multi-Tenant SaaS Architecture',
-    ],
-    'Take-Home Project': [
-      'Build a Full-Stack Mini App (48h)', 'Data Analysis Report (open dataset)', 'Security Assessment Report',
-    ],
+  suggestedSkillsMap: Record<string, { hard: string[]; soft: string[] }> = {
+    Engineering: {
+      hard: ['JavaScript / TypeScript', 'Python', 'Java', 'Go', 'Rust', 'Node.js', 'React', 'Angular',
+             'Vue.js', 'NestJS', 'Spring Boot', 'GraphQL', 'REST API Design', 'PostgreSQL', 'MongoDB',
+             'Redis', 'Docker', 'Kubernetes', 'AWS / GCP / Azure', 'Terraform', 'CI/CD'],
+      soft: ['Problem Solving', 'Communication', 'Teamwork', 'Adaptability', 'Time Management',
+             'Critical Thinking', 'Attention to Detail', 'Initiative'],
+    },
+    Data: {
+      hard: ['Python (pandas / NumPy)', 'SQL (advanced)', 'Apache Spark', 'dbt', 'Airflow', 'Kafka',
+             'Tableau / Power BI', 'Machine Learning', 'Deep Learning', 'Data Warehousing'],
+      soft: ['Analytical Thinking', 'Communication', 'Curiosity', 'Storytelling with Data', 'Collaboration'],
+    },
+    Security: {
+      hard: ['Penetration Testing', 'SIEM / SOC Tools', 'Network Security', 'OWASP Top 10',
+             'Cryptography', 'Cloud Security', 'Zero Trust Architecture'],
+      soft: ['Attention to Detail', 'Ethical Judgment', 'Problem Solving', 'Communication', 'Initiative'],
+    },
+    Design: {
+      hard: ['Figma', 'Design Systems', 'Prototyping', 'Accessibility (WCAG)', 'Adobe Creative Suite'],
+      soft: ['Creativity', 'Empathy', 'Communication', 'User Research', 'Collaboration'],
+    },
+    People: {
+      hard: ['HR Information Systems', 'Recruitment Platforms', 'Performance Management', 'Labor Law'],
+      soft: ['Empathy', 'Communication', 'Conflict Resolution', 'Organizational Skills', 'Discretion'],
+    },
+    Marketing: {
+      hard: ['SEO / SEM', 'Google Analytics', 'Content Strategy', 'Social Media Management', 'CRM Tools'],
+      soft: ['Creativity', 'Communication', 'Analytical Thinking', 'Storytelling', 'Adaptability'],
+    },
+    Finance: {
+      hard: ['Financial Modeling', 'Excel / Power Query', 'ERP Systems', 'IFRS / GAAP', 'Tax Compliance'],
+      soft: ['Attention to Detail', 'Analytical Thinking', 'Integrity', 'Communication', 'Problem Solving'],
+    },
+    Product: {
+      hard: ['Product Roadmapping', 'User Story Writing', 'A/B Testing', 'Data Analytics', 'Agile / Scrum'],
+      soft: ['Vision & Strategy', 'Communication', 'Empathy', 'Prioritization', 'Leadership'],
+    },
   };
 
   constructor(
@@ -210,71 +219,218 @@ export class CreateJobModalComponent implements OnInit {
     private userService:     UserService,
   ) {}
 
-  /* ─── Prereq Handlers ─── */
-  onSelectChange(prereq: Prerequisite, selected: string) {
-    if (selected !== '__other__') prereq.value = selected;
+  /* ─── Skill list helpers ─── */
+  get hardSkillList(): Skill[] { return this.form.skills.filter(s => s.type === 'hard'); }
+  get softSkillList(): Skill[] { return this.form.skills.filter(s => s.type === 'soft'); }
+  get obligatoryPrereqCount(): number { return this.form.prerequisites.filter(p => p.obligatory).length; }
+
+  get totalHardWeight(): number { return this.hardSkillList.reduce((s, sk) => s + sk.weight, 0); }
+  get totalSoftWeight(): number { return this.softSkillList.reduce((s, sk) => s + sk.weight, 0); }
+  get hardWeight():      number { return this.totalHardWeight; }
+  get softWeight():      number { return this.totalSoftWeight; }
+  get hardSkillsCount(): number { return this.hardSkillList.length; }
+  get softSkillsCount(): number { return this.softSkillList.length; }
+
+  get essentialHard(): number { return this.hardSkillList.filter(s => s.obligatory).length; }
+  get essentialSoft(): number { return this.softSkillList.filter(s => s.obligatory).length; }
+
+  get currentSuggestions(): string[] {
+    const map = this.suggestedSkillsMap[this.form.department] || this.suggestedSkillsMap['Engineering'];
+    return [...map.hard, ...map.soft].filter(s => !this.form.skills.some(sk => sk.name === s));
   }
-  onRoleSelectChange(prereq: Prerequisite, selected: string) {
-    if (selected !== '__other__') prereq.role = selected;
+  get currentHardSuggestions(): string[] {
+    const map = this.suggestedSkillsMap[this.form.department] || this.suggestedSkillsMap['Engineering'];
+    return map.hard.filter(s => !this.form.skills.some(sk => sk.name === s));
   }
+  get currentSoftSuggestions(): string[] {
+    const map = this.suggestedSkillsMap[this.form.department] || this.suggestedSkillsMap['Engineering'];
+    return map.soft.filter(s => !this.form.skills.some(sk => sk.name === s));
+  }
+
+  addSkill(type: 'hard' | 'soft' = 'hard') {
+    this.form.skills.push({ id: Date.now(), name: '', minLevel: 3, weight: 0, obligatory: false, type });
+  }
+  addSuggestedSkill(name: string, type: 'hard' | 'soft' = 'hard') {
+    if (!this.form.skills.some(s => s.name === name)) {
+      this.form.skills.push({ id: Date.now(), name, minLevel: 3, weight: 10, obligatory: false, type });
+    }
+  }
+  removeSkill(id: number) { this.form.skills = this.form.skills.filter(s => s.id !== id); }
+
+  /* ─── Global weights ─── */
+  get prereqGlobalWeight(): number { return this.form.skillsWeight; }
+  set prereqGlobalWeight(v: number) { this.form.skillsWeight = v; }
+
+  get totalGlobalWeight(): number { return 100; }
+
+  /* ─── Prerequisite weight ─── */
+  get totalPrereqWeight(): number {
+    return this.form.prerequisites.reduce((s, p) => s + (p.weight || 0), 0);
+  }
+
+  /* ─── Multi-select helpers ─── */
+  isMultiSelect(type: string): boolean {
+    return ['Education', 'Language', 'Certification', 'Location'].includes(type);
+  }
+  isMultiSelectType(type: string): boolean { return this.isMultiSelect(type); }
+
+  getChecklistOptions(type: string): string[] {
+    const defaults: Record<string, string[]> = {
+      Education:     this.educationOptions,
+      Language:      this.langOptions,
+      Certification: this.certificationOptions,
+      Location:      this.locationOptions,
+    };
+    return defaults[type] || [];
+  }
+
+  getOptionsForType(type: string, prereqId: number): string[] {
+    const prereq = this.form.prerequisites.find(p => p.id === prereqId);
+    return [...this.getChecklistOptions(type), ...(prereq?.extraOptions || [])];
+  }
+
+  toggleChecklistValue(p: Prerequisite, opt: string) {
+    const idx = p.values.indexOf(opt);
+    if (idx >= 0) p.values.splice(idx, 1);
+    else p.values.push(opt);
+  }
+  toggleOption(p: Prerequisite, opt: string) { this.toggleChecklistValue(p, opt); }
+
+  removeChecklistValue(p: Prerequisite, opt: string) {
+    p.values = p.values.filter(v => v !== opt);
+  }
+  removeOption(p: Prerequisite, opt: string) { this.removeChecklistValue(p, opt); }
+
+  addCustomOption(p: Prerequisite): void {
+    const text = (this.newOptionText[p.id] || '').trim();
+    const allExisting = [...this.getChecklistOptions(p.type), ...p.extraOptions];
+    if (text && !allExisting.includes(text)) {
+      p.extraOptions.push(text);
+      if (!p.values.includes(text)) p.values.push(text);
+    }
+    this.newOptionText[p.id] = '';
+    this.addingOption[p.id] = false;
+  }
+
+  onRoleSelectChange(p: Prerequisite, val: string) {
+    if (val !== '__other__') p.role = val;
+  }
+
+  addNewOption(prereqId: number) {
+    this.addingOption[prereqId] = true;
+    this.newOptionText[prereqId] = '';
+  }
+  confirmNewOption(p: Prerequisite) {
+    const text = (this.newOptionText[p.id] || '').trim();
+    if (text && !p.extraOptions.includes(text)) {
+      p.extraOptions.push(text);
+      if (!p.values.includes(text)) p.values.push(text);
+    }
+    this.addingOption[p.id] = false;
+    this.newOptionText[p.id] = '';
+  }
+  confirmCustom(_p: Prerequisite) { this.stepError = null; }
+
+  /* ─── Prereq type change ─── */
   onPrereqTypeChange(prereq: Prerequisite) {
     prereq.icon = this.prereqIcons[prereq.type] || 'check_circle';
     prereq.role = undefined;
     prereq.customLabel = undefined;
-    delete this.customMode[prereq.id + '_role'];
-    const defaults: Record<string, string> = {
-      Language: 'English (C1 – Advanced)', Education: "Bachelor's Degree in Computer Science",
-      Location: 'Based in Tunisia (on-site)', Certification: 'AWS Certified Developer – Associate', Custom: '',
-    };
-    if (prereq.type === 'Experience') {
-      prereq.value = '3'; prereq.role = '';
-      this.customMode[prereq.id + '_role'] = '';
-    } else {
-      prereq.value = defaults[prereq.type] || '';
-      if (prereq.type !== 'Custom') this.customMode[prereq.id] = prereq.value;
-    }
+    prereq.values = [];
+    prereq.extraOptions = [];
+    delete this.addingOption[prereq.id];
+    delete this.newOptionText[prereq.id];
+    prereq.value = prereq.type === 'Experience' ? '3' : '';
+    if (prereq.type === 'Experience') prereq.role = '';
   }
 
-  /* ─── Computed ─── */
-  get totalWeight(): number { return this.form.skills.reduce((s, sk) => s + sk.weight, 0); }
-  get essentialSkills(): number { return this.form.skills.filter(s => s.obligatory).length; }
-  get avgCompetency(): string {
-    if (!this.form.skills.length) return '0.0';
-    return (this.form.skills.reduce((s, sk) => s + sk.minLevel, 0) / this.form.skills.length).toFixed(1);
+  /* ─── Step Validation ─── */
+  get step1Valid(): boolean {
+    return !!(this.form.title.trim() && this.form.location.trim() && this.form.description.trim());
+  }
+
+  prereqHasValue(p: Prerequisite): boolean {
+    if (this.isMultiSelect(p.type)) return p.values.length > 0;
+    if (p.type === 'Experience') return !!(p.value);
+    if (p.type === 'Custom') return !!(p.customLabel?.trim() && p.value?.trim());
+    return true;
+  }
+
+  get step2Valid(): boolean {
+    if (!this.form.prerequisites.length) return true;
+    const allFilled = this.form.prerequisites.every(p => this.prereqHasValue(p));
+    const weightsOk = this.totalPrereqWeight === 100;
+    return allFilled && weightsOk;
+  }
+
+  get step3Valid(): boolean {
+    if (!this.form.skills.length) return false;
+    const hardOk = this.hardSkillList.length === 0 || this.totalHardWeight === 100;
+    const softOk = this.softSkillList.length === 0 || this.totalSoftWeight === 100;
+    return hardOk && softOk;
   }
 
   /* ─── Navigation ─── */
-  next() { if (this.currentStep < this.totalSteps) this.currentStep++; }
-  previous() { if (this.currentStep > 1) this.currentStep--; }
+  next() {
+    this.stepError = null;
+    if (this.currentStep === 1) {
+      this.showStep1Errors = true;
+      if (!this.step1Valid) {
+        this.stepError = 'Please fill in all required fields: title, location and description.';
+        return;
+      }
+    }
+    if (this.currentStep === 2) {
+      if (this.form.prerequisites.length && !this.form.prerequisites.every(p => this.prereqHasValue(p))) {
+        this.stepError = 'Each prerequisite must have at least one option selected.';
+        return;
+      }
+      if (this.form.prerequisites.length && this.totalPrereqWeight !== 100) {
+        this.stepError = `Prerequisite weights must total 100%. Current total: ${this.totalPrereqWeight}%`;
+        return;
+      }
+    }
+    if (this.currentStep === 3) {
+      if (!this.form.skills.length) {
+        this.stepError = 'Please add at least one skill.';
+        return;
+      }
+      if (this.hardSkillList.length > 0 && this.totalHardWeight !== 100) {
+        this.stepError = `Hard Skills weights must total 100%. Current total: ${this.totalHardWeight}%`;
+        return;
+      }
+      if (this.softSkillList.length > 0 && this.totalSoftWeight !== 100) {
+        this.stepError = `Soft Skills weights must total 100%. Current total: ${this.totalSoftWeight}%`;
+        return;
+      }
+    }
+    this.showStep1Errors = false;
+    if (this.currentStep < this.totalSteps) this.currentStep++;
+  }
+
+  previous() {
+    this.stepError = null;
+    this.showStep1Errors = false;
+    if (this.currentStep > 1) this.currentStep--;
+  }
+
   close() { this.closed.emit(); }
 
   /* ─── Prerequisites CRUD ─── */
   addPrerequisite() {
     const newId = Date.now();
-    const defaultVal = 'AWS Certified Developer – Associate';
-    this.customMode[newId] = defaultVal;
-    this.form.prerequisites.push({ id: newId, icon: 'verified', type: 'Certification', value: defaultVal, obligatory: false });
+    this.form.prerequisites.push({
+      id: newId, icon: 'verified', type: 'Certification',
+      value: '', obligatory: false, values: [], extraOptions: [], weight: 0,
+    });
   }
   removePrerequisite(id: number) {
     this.form.prerequisites = this.form.prerequisites.filter(p => p.id !== id);
-    delete this.customMode[id];
-    delete this.customMode[id + '_role'];
+    delete this.addingOption[id];
+    delete this.newOptionText[id];
   }
 
-  /* ─── Skills CRUD ─── */
-  addSkill() { this.form.skills.push({ id: Date.now(), name: '', minLevel: 3, weight: 0, obligatory: false }); }
-  addSuggestedSkill(name: string) {
-    if (!this.form.skills.some(s => s.name === name)) {
-      this.form.skills.push({ id: Date.now(), name, minLevel: 3, weight: 10, obligatory: false });
-    }
-  }
-  removeSkill(id: number) { this.form.skills = this.form.skills.filter(s => s.id !== id); }
-  get currentSuggestions(): string[] {
-    return (this.suggestedSkills[this.form.department] || this.suggestedSkills['Engineering'])
-      .filter(s => !this.form.skills.some(sk => sk.name === s));
-  }
-
-  /* ─── Test period helpers ─── */
+  /* ─── Test period ─── */
   get testPeriodDurationDays(): number | null {
     const { start, end } = this.form.testPeriod;
     if (!start || !end) return null;
@@ -287,54 +443,77 @@ export class CreateJobModalComponent implements OnInit {
     if (start && end) return new Date(end) > new Date(start);
     return true;
   }
-  get todayIso(): string {
-    return new Date().toISOString().slice(0, 10);
+  get todayIso(): string { return new Date().toISOString().slice(0, 10); }
+
+  /* ─── Agents ─── */
+  availableAgents: UserApi[] = [];
+  ngOnInit() { this.userService.getUsers().subscribe(a => this.availableAgents = a); }
+  getAgentLabel(uid: string): string {
+    const a = this.availableAgents.find(a => a.id === uid);
+    return a ? (a.name ?? a.email) : uid;
   }
 
-  /* ─── Gestion des assignations de TESTS ─── */
-  availableAgents: UserApi[] = [];
-  ngOnInit() {
-    this.userService.getUsers().subscribe(agents => this.availableAgents = agents);
+  private agentsByRole(type: 'rh' | 'tech'): UserApi[] {
+    const role = type === 'rh' ? 'rh' : 'technical evaluator';
+    return this.availableAgents.filter(a => a.role === role);
   }
-  getAgentLabel(uid: string): string {
-    const agent = this.availableAgents.find(a => a.id === uid);
-    return agent ? (agent.name ?? agent.email) : uid;
-  }
+
   addAssignee(type: 'rh' | 'tech', event: Event) {
     const uid = (event.target as HTMLSelectElement).value;
     if (!uid) return;
-    const target = type === 'rh' ? this.form.testAssignments.rhTest : this.form.testAssignments.technicalTest;
-    if (!target.assignedTo.includes(uid)) target.assignedTo.push(uid);
+    const t = type === 'rh' ? this.form.testAssignments.rhTest : this.form.testAssignments.technicalTest;
+    if (!t.assignedTo.includes(uid)) t.assignedTo.push(uid);
     (event.target as HTMLSelectElement).value = '';
   }
   removeAssignee(type: 'rh' | 'tech', uid: string) {
-    const target = type === 'rh' ? this.form.testAssignments.rhTest : this.form.testAssignments.technicalTest;
-    target.assignedTo = target.assignedTo.filter(id => id !== uid);
+    const t = type === 'rh' ? this.form.testAssignments.rhTest : this.form.testAssignments.technicalTest;
+    t.assignedTo = t.assignedTo.filter(id => id !== uid);
   }
   getUnassigned(type: 'rh' | 'tech'): UserApi[] {
-    const already = type === 'rh' ? this.form.testAssignments.rhTest.assignedTo : this.form.testAssignments.technicalTest.assignedTo;
-    return this.availableAgents.filter(a => !already.includes(a.id));
+    const already = type === 'rh'
+      ? this.form.testAssignments.rhTest.assignedTo
+      : this.form.testAssignments.technicalTest.assignedTo;
+    return this.agentsByRole(type).filter(a => !already.includes(a.id));
   }
 
-  /* ─── Gestion des assignations d'INTERVIEW ─── */
   addInterviewAssignee(type: 'rh' | 'tech', event: Event) {
     const uid = (event.target as HTMLSelectElement).value;
     if (!uid) return;
-    const target = type === 'rh' ? this.form.intervAssignments.rhTest : this.form.intervAssignments.technicalTest;
-    if (!target.assignedTo.includes(uid)) target.assignedTo.push(uid);
+    const t = type === 'rh' ? this.form.intervAssignments.rhTest : this.form.intervAssignments.technicalTest;
+    if (!t.assignedTo.includes(uid)) t.assignedTo.push(uid);
     (event.target as HTMLSelectElement).value = '';
   }
   removeInterviewAssignee(type: 'rh' | 'tech', uid: string) {
-    const target = type === 'rh' ? this.form.intervAssignments.rhTest : this.form.intervAssignments.technicalTest;
-    target.assignedTo = target.assignedTo.filter(id => id !== uid);
+    const t = type === 'rh' ? this.form.intervAssignments.rhTest : this.form.intervAssignments.technicalTest;
+    t.assignedTo = t.assignedTo.filter(id => id !== uid);
   }
   getUnassignedInterviewers(type: 'rh' | 'tech'): UserApi[] {
-    const already = type === 'rh' ? this.form.intervAssignments.rhTest.assignedTo : this.form.intervAssignments.technicalTest.assignedTo;
-    return this.availableAgents.filter(a => !already.includes(a.id));
+    const already = type === 'rh'
+      ? this.form.intervAssignments.rhTest.assignedTo
+      : this.form.intervAssignments.technicalTest.assignedTo;
+    return this.agentsByRole(type).filter(a => !already.includes(a.id));
+  }
+
+  addRhInterviewAssignee(e: Event)        { this.addInterviewAssignee('rh', e); }
+  removeRhInterviewAssignee(uid: string)  { this.removeInterviewAssignee('rh', uid); }
+  getUnassignedRhInterviewers()           { return this.getUnassignedInterviewers('rh'); }
+  addTechInterviewAssignee(e: Event)      { this.addInterviewAssignee('tech', e); }
+  removeTechInterviewAssignee(uid: string){ this.removeInterviewAssignee('tech', uid); }
+  getUnassignedTechInterviewers()         { return this.getUnassignedInterviewers('tech'); }
+
+  /* ─── Donut helper ─── */
+  dashArray(pct: number): string {
+    const clamped = Math.min(100, Math.max(0, pct));
+    return `${(clamped / 100) * 314.16} 314.16`;
   }
 
   /* ─── Submit ─── */
   private mapFormToJobOffer(form: NewJobForm): JobOffer {
+    const skillsPct = form.skillsWeight;
+    const hardPct   = Math.round(skillsPct * form.hardSkillsWeight / 100);
+    const softPct   = skillsPct - hardPct;
+    const prereqPct = 100 - skillsPct;
+
     return {
       title:           form.title,
       department:      form.department as JobOffer['department'],
@@ -342,38 +521,23 @@ export class CreateJobModalComponent implements OnInit {
       contractType:    form.contractType as JobOffer['contractType'],
       experienceLevel: form.experienceLevel as JobOffer['experienceLevel'],
       description:     form.description,
-      prerequisites:   form.prerequisites.map(({ id, ...rest }) => rest) as any,
+      globalWeights:   { prerequisites: prereqPct, hardSkills: hardPct, softSkills: softPct } as any,
+      prerequisites:   form.prerequisites.map(({ id, extraOptions, values, ...rest }) => ({
+        ...rest,
+        value: this.isMultiSelect(rest.type) ? values.join(', ') : rest.value,
+      })) as any,
       skills:          form.skills.map(({ id, ...rest }) => rest) as any,
       tests:           form.tests.map(({ id, ...rest }) => rest) as any,
       stages:          form.stages.map(({ id, ...rest }) => rest) as any,
       testAssignments: {
-        rhTest: {
-          enabled:    form.testAssignments.rhTest.enabled,
-          assignedTo: form.testAssignments.rhTest.assignedTo,
-          deadline:   form.testAssignments.rhTest.deadline || null,
-        },
-        technicalTest: {
-          enabled:    form.testAssignments.technicalTest.enabled,
-          assignedTo: form.testAssignments.technicalTest.assignedTo,
-          deadline:   form.testAssignments.technicalTest.deadline || null,
-        },
+        rhTest:        { enabled: form.testAssignments.rhTest.enabled,        assignedTo: form.testAssignments.rhTest.assignedTo,        deadline: form.testAssignments.rhTest.deadline || null },
+        technicalTest: { enabled: form.testAssignments.technicalTest.enabled, assignedTo: form.testAssignments.technicalTest.assignedTo, deadline: form.testAssignments.technicalTest.deadline || null },
       },
       intervAssignments: {
-        rhTest: {
-          enabled:    form.intervAssignments.rhTest.enabled,
-          assignedTo: form.intervAssignments.rhTest.assignedTo,
-          deadline:   form.intervAssignments.rhTest.deadline || null,
-        },
-        technicalTest: {
-          enabled:    form.intervAssignments.technicalTest.enabled,
-          assignedTo: form.intervAssignments.technicalTest.assignedTo,
-          deadline:   form.intervAssignments.technicalTest.deadline || null,
-        },
+        rhTest:        { enabled: form.intervAssignments.rhTest.enabled,        assignedTo: form.intervAssignments.rhTest.assignedTo,        deadline: form.intervAssignments.rhTest.deadline || null },
+        technicalTest: { enabled: form.intervAssignments.technicalTest.enabled, assignedTo: form.intervAssignments.technicalTest.assignedTo, deadline: form.intervAssignments.technicalTest.deadline || null },
       },
-      testPeriod: {
-        start: form.testPeriod.start || null,
-        end:   form.testPeriod.end   || null,
-      } as any,
+      testPeriod: { start: form.testPeriod.start || null, end: form.testPeriod.end || null } as any,
       status: 'open',
     };
   }
@@ -381,59 +545,18 @@ export class CreateJobModalComponent implements OnInit {
   createJob() {
     if (this.isSubmitting) return;
     this.submitError = null;
-
-    if (!this.form.title.trim()) {
-      this.submitError = 'Job title is required.';
-      return;
+    if (!this.form.title.trim()) { this.submitError = 'Job title is required.'; return; }
+    if (!this.testPeriodValid)   { this.submitError = 'Test period end date must be after start date.'; return; }
+    if (this.form.intervAssignments.rhTest.enabled && !this.form.intervAssignments.rhTest.assignedTo.length) {
+      this.submitError = 'Please assign at least one RH interviewer.'; return;
     }
-    if (!this.testPeriodValid) {
-      this.submitError = 'Test period end date must be after start date.';
-      return;
+    if (this.form.intervAssignments.technicalTest.enabled && !this.form.intervAssignments.technicalTest.assignedTo.length) {
+      this.submitError = 'Please assign at least one technical interviewer.'; return;
     }
-    // Validation des assignations d'interview
-    if (this.form.intervAssignments.rhTest.enabled && this.form.intervAssignments.rhTest.assignedTo.length === 0) {
-      this.submitError = 'Please assign at least one RH interviewer.';
-      return;
-    }
-    if (this.form.intervAssignments.technicalTest.enabled && this.form.intervAssignments.technicalTest.assignedTo.length === 0) {
-      this.submitError = 'Please assign at least one technical interviewer.';
-      return;
-    }
-
     this.isSubmitting = true;
-    const payload = this.mapFormToJobOffer(this.form);
-
-    this.jobOfferService.createJob(payload).subscribe({
-      next: (savedJob) => {
-        this.isSubmitting = false;
-        this.jobCreated.emit(savedJob as any);
-        this.close();
-      },
-      error: (err: Error) => {
-        this.isSubmitting = false;
-        this.submitError  = err.message;
-      },
+    this.jobOfferService.createJob(this.mapFormToJobOffer(this.form)).subscribe({
+      next: (saved) => { this.isSubmitting = false; this.jobCreated.emit((saved as any).job ?? saved as any); this.close(); },
+      error: (err: Error) => { this.isSubmitting = false; this.submitError = err.message; },
     });
   }
-  // Pour l'interview RH (méthodes spécifiques)
-addRhInterviewAssignee(event: Event) {
-  this.addInterviewAssignee('rh', event);
-}
-removeRhInterviewAssignee(uid: string) {
-  this.removeInterviewAssignee('rh', uid);
-}
-getUnassignedRhInterviewers(): UserApi[] {
-  return this.getUnassignedInterviewers('rh');
-}
-
-// Pour l'interview Technique
-addTechInterviewAssignee(event: Event) {
-  this.addInterviewAssignee('tech', event);
-}
-removeTechInterviewAssignee(uid: string) {
-  this.removeInterviewAssignee('tech', uid);
-}
-getUnassignedTechInterviewers(): UserApi[] {
-  return this.getUnassignedInterviewers('tech');
-}
 }

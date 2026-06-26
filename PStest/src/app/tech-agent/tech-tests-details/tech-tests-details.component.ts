@@ -309,8 +309,8 @@ export class TechTestsDetailsComponent implements OnInit {
 
   get antiCheatRiskLabel(): string {
     const map: Record<string, string> = {
-      none: 'AUCUN RISQUE DÉTECTÉ', low: 'RISQUE FAIBLE',
-      medium: 'RISQUE MOYEN', high: 'RISQUE ÉLEVÉ',
+      none: 'NO RISK DETECTED', low: 'LOW RISK',
+      medium: 'MEDIUM RISK', high: 'HIGH RISK',
     };
     return map[this.antiCheatRisk] ?? '';
   }
@@ -329,17 +329,17 @@ export class TechTestsDetailsComponent implements OnInit {
 
   getRiskLabel(risk: string): string {
     const map: Record<string, string> = {
-      low: 'Faible', medium: 'Moyen', high: 'HIGH', none: ''
+      low: 'Low', medium: 'Medium', high: 'High', none: ''
     };
     return map[risk] ?? risk;
   }
 
   getEventLabel(type: AntiCheatEventType): string {
     const map: Record<AntiCheatEventType, string> = {
-      focus_loss: 'Perte de focus', focus_gain: 'Regain de focus',
-      tab_hidden: "Changement d'onglet", tab_visible: 'Onglet visible',
-      paste_detected: 'Collage détecté', copy_detected: 'Copie détectée',
-      cut_detected: 'Couper détecté', right_click: 'Clic droit',
+      focus_loss: 'Focus lost', focus_gain: 'Focus regained',
+      tab_hidden: 'Tab switched', tab_visible: 'Tab visible',
+      paste_detected: 'Paste detected', copy_detected: 'Copy detected',
+      cut_detected: 'Cut detected', right_click: 'Right click',
     };
     return map[type] ?? type;
   }

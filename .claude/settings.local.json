@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx ng *)",
+      "Bash(npm install *)",
+      "Bash(Start-Sleep -Seconds 20)",
+      "Bash(Get-Content \"C:\\\\Users\\\\21622\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-21622-Desktop-pfe-ing-final\\\\1bf0d25d-426e-4596-8dba-7389db13bc26\\\\tasks\\\\bznmz7k62.output\")",
+      "Bash(Select-Object -Last 15)",
+      "PowerShell(Get-Content *)",
+      "PowerShell(\\(Get-Content \"C:\\\\Users\\\\21622\\\\Desktop\\\\pfe-ing-final\\\\PStest\\\\src\\\\app\\\\candidate\\\\candidate-jobespace\\\\candidate-jobespace.component.css\" | Select-Object -Last 20\\) -join \"`n\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\21622\\\\Desktop\\\\pfe-ing-final\\\\PStest\\\\src\\\\app\" -Recurse -Filter \"*.html\" -o:none)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(xargs grep -l \"RecommendedJob\\\\|matchedSkills\\\\|missingSkills\")",
+      "Bash(ollama stop *)",
+      "Bash(ollama ps *)"
+    ]
+  }
+}

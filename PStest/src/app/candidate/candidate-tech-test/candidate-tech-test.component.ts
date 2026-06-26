@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService, CurrentUser } from '../../_services/auth.service';
 import {
@@ -8,15 +8,16 @@ import {
 } from '../../_services/candidate.service';
 import { CodeEditorComponent, ProblemExample } from '../code-editor/code-editor.component';
 import { SupportedLanguage, ComplexityResult, TestCaseResult } from '../../_services/code-runner.service';
-import { AntiCheatReport } from '../../_services/anti-cheat.service';
+import { AntiCheatService, AntiCheatReport } from '../../_services/anti-cheat.service';
 import { SubmissionService } from '../../_services/submission.service';
+import { Subject, takeUntil } from 'rxjs';
 
 @Component({
   selector: 'app-candidate-tech-test',
   templateUrl: './candidate-tech-test.component.html',
   styleUrl: './candidate-tech-test.component.css',
 })
-export class CandidateTechTestComponent implements OnInit, OnDestroy {
+export class CandidateTechTestComponent implements OnInit, AfterViewInit, OnDestroy {
   currentUser: CurrentUser | null = null;
 
   loading    = true;
@@ -36,6 +37,9 @@ export class CandidateTechTestComponent implements OnInit, OnDestroy {
   techAnswers: Record<string, any> = {};
 
   private antiCheatReport: AntiCheatReport | null = null;
+  antiCheatCount = 0;
+  antiCheatRisk: 'low' | 'medium' | 'high' = 'low';
+  private destroy$ = new Subject<void>();
 
   timer: { remaining: number; intervalId: any; expired: boolean } | null = null;
 
@@ -44,7 +48,8 @@ export class CandidateTechTestComponent implements OnInit, OnDestroy {
     private router:            Router,
     private authService:       AuthService,
     private testsService:      CandidateService,
-    private submissionService: SubmissionService
+    private submissionService: SubmissionService,
+    private antiCheat:         AntiCheatService,
   ) {}
 
   ngOnInit(): void {
@@ -58,8 +63,20 @@ export class CandidateTechTestComponent implements OnInit, OnDestroy {
     this.loadTest();
   }
 
+  ngAfterViewInit(): void {
+    this.antiCheat.start();
+    this.antiCheat.event$.pipe(takeUntil(this.destroy$)).subscribe(() => {
+      const report = this.antiCheat.getReport();
+      this.antiCheatCount = report.totalSuspiciousEvents;
+      this.antiCheatRisk  = report.riskLevel;
+    });
+  }
+
   ngOnDestroy(): void {
     if (this.timer?.intervalId) clearInterval(this.timer.intervalId);
+    this.antiCheat.stop();
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   // ── Data Loading ─────────────────────────────────────────────────────────────
@@ -128,8 +145,16 @@ export class CandidateTechTestComponent implements OnInit, OnDestroy {
     return `${m}:${s}`;
   }
 
+  private get totalSeconds(): number {
+    return (this.techTest?.timeLimitMinutes ?? 30) * 60;
+  }
+
+  get timerWarning(): boolean {
+    return (this.timer?.remaining ?? 9999) <= this.totalSeconds * 0.25;
+  }
+
   get timerDanger(): boolean {
-    return (this.timer?.remaining ?? 9999) < 300;
+    return (this.timer?.remaining ?? 9999) <= this.totalSeconds * 0.1;
   }
 
   // ── Answers ──────────────────────────────────────────────────────────────────
@@ -198,6 +223,8 @@ export class CandidateTechTestComponent implements OnInit, OnDestroy {
 
     if (event.antiCheat !== null && event.antiCheat !== undefined) {
       this.antiCheatReport = event.antiCheat;
+      this.antiCheatCount  = event.antiCheat.totalSuspiciousEvents;
+      this.antiCheatRisk   = event.antiCheat.riskLevel;
     }
   }
 

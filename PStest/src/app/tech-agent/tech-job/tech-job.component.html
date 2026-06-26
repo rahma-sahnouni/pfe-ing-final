@@ -296,12 +296,6 @@
               placeholder="Briefly describe the assessment…"></textarea>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Tags <span class="hint">comma-separated</span></label>
-            <input type="text" [(ngModel)]="testForm.tags"
-              placeholder="arrays, graphs, OOP, SQL…" />
-          </div>
-
           <div class="form-group checkbox-group">
             <label class="checkbox-label">
               <input type="checkbox" [(ngModel)]="testForm.isPublic" />
@@ -321,12 +315,6 @@
                 <path d="M4 6l3 2-3 2M9 10h3"/>
               </svg>
               Problem Solving
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Expected Complexity</label>
-              <input type="text" [(ngModel)]="testForm.ps.expectedComplexity"
-                placeholder="e.g. O(n log n)" />
             </div>
 
             <div class="form-group">
@@ -410,22 +398,6 @@
               <button class="btn-add-row" (click)="addExample()">+ Add example</button>
             </div>
 
-            <div class="form-group">
-              <label class="form-label">Constraints</label>
-              <div class="constraints-list">
-                <div class="constraint-row"
-                     *ngFor="let c of testForm.ps.constraints; let i = index">
-                  <input type="text" [(ngModel)]="c.label" placeholder="1 ≤ n ≤ 10⁵" />
-                  <button class="btn-remove-row" (click)="removeConstraint(i)"
-                    [disabled]="testForm.ps.constraints.length === 1" title="Remove">
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
-                      <line x1="3" y1="8" x2="13" y2="8"/>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              <button class="btn-add-row" (click)="addConstraint()">+ Add constraint</button>
-            </div>
           </ng-container>
 
           <ng-container *ngIf="hasQCM">
@@ -610,9 +582,6 @@
 
         <div class="test-item-meta">
           <span *ngIf="test.timeLimitMinutes">⏱ {{ test.timeLimitMinutes }} min</span>
-          <span *ngIf="test.problemSolving?.expectedComplexity">
-            Ω {{ test.problemSolving.expectedComplexity }}
-          </span>
           <span *ngIf="test.qcm?.questions?.length">
             ☑ {{ test.qcm.questions.length }} question(s)
           </span>
@@ -620,10 +589,6 @@
         </div>
 
         <p class="test-item-desc" *ngIf="test.description">{{ test.description }}</p>
-
-        <div class="tag-list" *ngIf="test.tags?.length">
-          <span class="tag" *ngFor="let tag of test.tags">{{ tag }}</span>
-        </div>
 
         <!-- ── Actions ── -->
         <div class="test-item-actions">
@@ -754,12 +719,6 @@
               placeholder="Briefly describe the assessment…"></textarea>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Tags <span class="hint">comma-separated</span></label>
-            <input type="text" [(ngModel)]="editForm.tags"
-              placeholder="arrays, graphs, OOP, SQL…" />
-          </div>
-
           <div class="form-group checkbox-group">
             <label class="checkbox-label">
               <input type="checkbox" [(ngModel)]="editForm.isPublic" />
@@ -780,12 +739,6 @@
                 <path d="M4 6l3 2-3 2M9 10h3"/>
               </svg>
               Problem Solving
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">Expected Complexity</label>
-              <input type="text" [(ngModel)]="editForm.ps.expectedComplexity"
-                placeholder="e.g. O(n log n)" />
             </div>
 
             <div class="form-group">
@@ -869,22 +822,6 @@
               <button class="btn-add-row" (click)="addEditExample()">+ Add example</button>
             </div>
 
-            <div class="form-group">
-              <label class="form-label">Constraints</label>
-              <div class="constraints-list">
-                <div class="constraint-row"
-                     *ngFor="let c of editForm.ps.constraints; let i = index">
-                  <input type="text" [(ngModel)]="c.label" placeholder="1 ≤ n ≤ 10⁵" />
-                  <button class="btn-remove-row" (click)="removeEditConstraint(i)"
-                    [disabled]="editForm.ps.constraints.length === 1" title="Remove">
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
-                      <line x1="3" y1="8" x2="13" y2="8"/>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              <button class="btn-add-row" (click)="addEditConstraint()">+ Add constraint</button>
-            </div>
           </ng-container>
 
           <!-- ── QCM section ── -->

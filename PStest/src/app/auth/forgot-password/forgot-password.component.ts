@@ -75,7 +75,7 @@ export class ForgotPasswordComponent implements OnDestroy {
       },
       error: (err) => {
         this.isLoading = false;
-        this.errorMessage = 'Une erreur serveur est survenue. Réessayez plus tard.';
+        this.errorMessage = 'A server error occurred. Please try again later.';
       }
     });
   }

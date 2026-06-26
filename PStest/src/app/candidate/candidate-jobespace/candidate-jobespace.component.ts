@@ -36,8 +36,10 @@ export class CandidateJOBEspaceComponent implements OnInit {
   showMatchModal = false;
   selectedMatchForModal: RecommendedJob | null = null;
 
-  candidateId = '';
-  hasCV       = false;
+  candidateId  = '';
+  hasCV        = false;
+  appliedJobIds  = new Set<string>();
+  jobAiScores    = new Map<string, number | null>();
 
   constructor(
     private jobService: JobOfferService,
@@ -49,16 +51,31 @@ export class CandidateJOBEspaceComponent implements OnInit {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     this.candidateId = user._id || user.id || '';
     this.loadJobsFromApi();
-    this.checkCandidateCV();
+    this.loadMyApplications();
   }
 
-  private checkCandidateCV(): void {
+  private loadMyApplications(): void {
     this.candidateService.getProfile().subscribe({
-      next: (profile) => {
-        this.hasCV = !!profile.cv?.originalName;
-      },
+      next: (profile) => { this.hasCV = !!profile.cv?.originalName; },
       error: () => { this.hasCV = false; }
     });
+    this.candidateService.getJourney().subscribe({
+      next: (res) => {
+        for (const item of res.journey) {
+          this.appliedJobIds.add(item.jobOffer._id);
+          this.jobAiScores.set(item.jobOffer._id, item.aiMatchScore);
+        }
+      },
+      error: () => {}
+    });
+  }
+
+  hasApplied(jobId: string | undefined): boolean {
+    return !!jobId && this.appliedJobIds.has(jobId);
+  }
+
+  getAiScore(jobId: string | undefined): number | null {
+    return jobId ? (this.jobAiScores.get(jobId) ?? null) : null;
   }
 
   private loadJobsFromApi(): void {
@@ -127,7 +144,8 @@ export class CandidateJOBEspaceComponent implements OnInit {
     this.applyFilters();
   }
 
-  getScoreClass(score: number): string {
+  getScoreClass(score: number | null): string {
+    if (!score) return 'score-low';
     if (score >= 75) return 'score-high';
     if (score >= 50) return 'score-medium';
     return 'score-low';
@@ -199,9 +217,10 @@ export class CandidateJOBEspaceComponent implements OnInit {
       next: (res) => {
         this.uploadMessage = `✅ Application submitted! AI Match Score: ${res.aiScore ?? 'N/A'}%`;
         this.isUploading = false;
+        this.appliedJobIds.add(jobId);
+        this.jobAiScores.set(jobId, res.aiScore ?? null);
         setTimeout(() => {
           this.closeApplyModal();
-          this.router.navigate(['/candidate/jobs']);
         }, 2000);
       },
       error: (err) => {

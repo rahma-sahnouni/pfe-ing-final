@@ -393,7 +393,12 @@
 .empty-icon { font-size: 36px; opacity: .5; }
 
 /* Answers wrap */
-.answers-wrap { display: flex; flex-direction: column; }
+.answers-wrap {
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  gap: 20px;
+}
 
 /* Candidate header */
 .cand-header {

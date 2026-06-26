@@ -511,3 +511,48 @@
   color: var(--red);
 }
 .btn-reject:hover { background: rgba(239,68,68,.3); }
+
+/* ─── Matched / Missing unified list ─────────────────────── */
+.match-group { margin-bottom: 20px; }
+.match-group h4 { font-size: 11px; font-weight: 700; letter-spacing: .08em; color: #94a3b8; margin: 0 0 10px; }
+
+.prereq-list { display: flex; flex-direction: column; gap: 6px; }
+
+.prereq-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 8px;
+}
+.prereq-item.missing {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+.prereq-icon { font-size: 14px; flex-shrink: 0; }
+.prereq-label { flex: 1; font-size: 13px; color: #e2e8f0; }
+.prereq-type {
+  font-size: 10px; font-weight: 600; padding: 2px 6px;
+  background: rgba(255,255,255,0.06); border-radius: 4px; color: #94a3b8;
+}
+.obligatory-badge {
+  font-size: 10px; font-weight: 700; padding: 2px 6px;
+  background: rgba(239,68,68,0.2); color: #f87171; border-radius: 4px;
+}
+
+/* ─── Status dropdown (editable) ─────────────────────────── */
+.status-select {
+  border: none;
+  border-radius: 20px;
+  padding: 3px 22px 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23ffffff80'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+.status-select option { background: #1e2535; color: #e2e8f0; }

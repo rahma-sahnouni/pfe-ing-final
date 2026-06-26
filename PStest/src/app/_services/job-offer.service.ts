@@ -45,6 +45,7 @@ export interface JobOffer {
   description?:     string;
   prerequisites?:   any[];
   skills?:          any[];
+  globalWeights?:   { prerequisites: number; hardSkills: number; softSkills: number };
   tests?:           any[];
   stages?:          any[];
   createdBy?:       string;

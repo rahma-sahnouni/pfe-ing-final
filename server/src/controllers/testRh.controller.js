@@ -64,10 +64,11 @@ exports.updateTest = async (req, res, next) => {
     const test = await JobTest.findOne({ job: req.params.jobId });
     if (!test) return res.status(404).json({ message: 'Test not found.' });
 
-    const { name, description, status } = req.body;
-    if (name        !== undefined) test.name        = name;
-    if (description !== undefined) test.description = description;
-    if (status      !== undefined) test.status      = status;
+    const { name, description, status, timeLimitMinutes } = req.body;
+    if (name             !== undefined) test.name             = name;
+    if (description      !== undefined) test.description      = description;
+    if (status           !== undefined) test.status           = status;
+    if (timeLimitMinutes !== undefined) test.timeLimitMinutes = timeLimitMinutes;
 
     await test.save();
     res.json(test);

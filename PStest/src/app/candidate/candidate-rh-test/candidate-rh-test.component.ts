@@ -1,20 +1,22 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService, CurrentUser } from '../../_services/auth.service';
 import {
   CandidateService,
   RhTest,
   Question,
-  JobOfferRef,  // ← add this
+  JobOfferRef,
 } from '../../_services/candidate.service';
 import { SubmissionService } from '../../_services/submission.service';
+import { AntiCheatService } from '../../_services/anti-cheat.service';
+import { Subject, takeUntil } from 'rxjs';
 
 @Component({
   selector: 'app-candidate-rh-test',
   templateUrl: './candidate-rh-test.component.html',
   styleUrl: './candidate-rh-test.component.css',
 })
-export class CandidateRhTestComponent implements OnInit {
+export class CandidateRhTestComponent implements OnInit, AfterViewInit, OnDestroy {
   currentUser: CurrentUser | null = null;
 
   loading    = true;
@@ -22,6 +24,9 @@ export class CandidateRhTestComponent implements OnInit {
   submitted  = false;
   submitting = false;
   allDone    = false;
+
+  elapsedSeconds = 0;
+  private timerRef: any = null;
 
   jobId:  string = '';
   testId: string = '';
@@ -33,12 +38,17 @@ jobOffer: JobOfferRef | null = null;
   dragRankOrder: Record<string, string[]> = {};
   private draggedItem: string | null = null;
 
+  antiCheatCount = 0;
+  antiCheatRisk: 'low' | 'medium' | 'high' = 'low';
+  private destroy$ = new Subject<void>();
+
   constructor(
     private route:        ActivatedRoute,
     private router:       Router,
     private authService:  AuthService,
     private testsService: CandidateService,
-    private submissionService: SubmissionService
+    private submissionService: SubmissionService,
+    private antiCheat: AntiCheatService,
   ) {}
 
   ngOnInit(): void {
@@ -50,6 +60,15 @@ jobOffer: JobOfferRef | null = null;
     this.jobId  = this.route.snapshot.paramMap.get('jobId')  ?? '';
     this.testId = this.route.snapshot.paramMap.get('testId') ?? '';
     this.loadTest();
+  }
+
+  ngAfterViewInit(): void {
+    this.antiCheat.start();
+    this.antiCheat.event$.pipe(takeUntil(this.destroy$)).subscribe(() => {
+      const report = this.antiCheat.getReport();
+      this.antiCheatCount = report.totalSuspiciousEvents;
+      this.antiCheatRisk  = report.riskLevel;
+    });
   }
 
   // ── Data Loading ────────────────────────────────────────────────────────────
@@ -73,6 +92,7 @@ jobOffer: JobOfferRef | null = null;
         this.rhTest   = test;
         this.submitted = job.submittedRhIds?.includes(this.testId) ?? false;
         this.loading   = false;
+        if (!this.submitted) this.startTimer();
       },
       error: (err) => {
         this.error   = err.message || 'Failed to load test.';
@@ -160,7 +180,7 @@ jobOffer: JobOfferRef | null = null;
       next: () => {
         this.submitted  = true;
         this.submitting = false;
-        // Navigate back to journey after short delay
+        this.stopTimer();
         setTimeout(() => this.router.navigate(['/candidate/my-journey']), 1500);
       },
       error: (err) => {
@@ -168,6 +188,61 @@ jobOffer: JobOfferRef | null = null;
         this.submitting = false;
       },
     });
+  }
+
+  // ── Timer ────────────────────────────────────────────────────────────────────
+
+  // ── Timer ────────────────────────────────────────────────────────────────────
+
+  get hasLimit(): boolean { return (this.rhTest?.timeLimitMinutes ?? 0) > 0; }
+
+  private get totalSeconds(): number {
+    return (this.rhTest?.timeLimitMinutes ?? 0) * 60;
+  }
+
+  get remainingSeconds(): number {
+    return Math.max(0, this.totalSeconds - this.elapsedSeconds);
+  }
+
+  get timerProgress(): number {
+    if (!this.totalSeconds) return 100;
+    return (this.remainingSeconds / this.totalSeconds) * 100;
+  }
+
+  get timerWarning(): boolean {
+    return this.hasLimit && this.remainingSeconds <= this.totalSeconds * 0.25;
+  }
+
+  get timerDanger(): boolean {
+    return this.hasLimit && this.remainingSeconds <= this.totalSeconds * 0.1;
+  }
+
+  formatRemaining(): string {
+    const rem = this.remainingSeconds;
+    const m = Math.floor(rem / 60).toString().padStart(2, '0');
+    const s = (rem % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  }
+
+  private startTimer(): void {
+    this.timerRef = setInterval(() => {
+      this.elapsedSeconds++;
+      if (this.hasLimit && this.elapsedSeconds >= this.totalSeconds) {
+        this.stopTimer();
+        this.submit();
+      }
+    }, 1000);
+  }
+
+  private stopTimer(): void {
+    if (this.timerRef) { clearInterval(this.timerRef); this.timerRef = null; }
+  }
+
+  ngOnDestroy(): void {
+    this.stopTimer();
+    this.antiCheat.stop();
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────

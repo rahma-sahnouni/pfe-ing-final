@@ -217,12 +217,13 @@ export interface Theme {
 }
 
 export interface RhTest {
-  _id:          string;
-  job:          string;
-  name:         string;
-  description?: string;
-  status:       string;
-  themes:       Theme[];
+  _id:               string;
+  job:               string;
+  name:              string;
+  description?:      string;
+  status:            string;
+  themes:            Theme[];
+  timeLimitMinutes?: number | null;
 }
 
 export interface QcmQuestion {

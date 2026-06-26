@@ -56,14 +56,15 @@ export interface Theme {
 }
 
 export interface JobTest {
-  _id?:        string;
-  job:         string;
-  name:        string;
-  description?: string;
-  status:      TestStatus;
-  themes:      Theme[];
-  createdAt?:  string;
-  updatedAt?:  string;
+  _id?:              string;
+  job:               string;
+  name:              string;
+  description?:      string;
+  status:            TestStatus;
+  themes:            Theme[];
+  timeLimitMinutes?: number | null;
+  createdAt?:        string;
+  updatedAt?:        string;
 }
 
 export interface BuiltinCriterion { key: string; label: string; color: string; }
@@ -112,7 +113,7 @@ export class TestRhService {
   }
 
   /** PATCH /job-tests/:jobId */
-  updateTest(jobId: string, data: Partial<Pick<JobTest, 'name' | 'description' | 'status'>>): Observable<JobTest> {
+  updateTest(jobId: string, data: Partial<Pick<JobTest, 'name' | 'description' | 'status' | 'timeLimitMinutes'>>): Observable<JobTest> {
     return this.http.patch<JobTest>(`${API}/${jobId}`, data);
   }
 

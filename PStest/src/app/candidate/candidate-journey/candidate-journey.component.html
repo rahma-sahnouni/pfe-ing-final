@@ -373,84 +373,75 @@
 
 </ng-container>
               <!-- Stage 5: Interview ──────────────────────────────────── -->
-<!-- Stage 5: Interview ──────────────────────────────────── -->
 <ng-container *ngIf="stage.key === 'interview'">
   <div *ngIf="!current.interviews?.rh && !current.interviews?.tech" class="muted-info">
     If selected, the HR team will schedule an interview and the details will appear here.
   </div>
 
-  <!-- Entretien RH -->
-  <div *ngIf="current.interviews?.rh" class="interview-details-section">
-    <div class="interview-details-title">👔 RH Interview</div>
-    <div class="interview-details">
-      <div class="id-row" *ngIf="current.interviews?.rh?.scheduledAt">
-        <span class="material-icons id-icon">event</span>
-        <div>
-          <div class="id-label">Date & time</div>
-          <div class="id-value">{{ formatDateTime(current.interviews?.rh?.scheduledAt) }}</div>
-        </div>
-      </div>
-      <div class="id-row" *ngIf="current.interviews?.rh?.type">
-        <span class="material-icons id-icon">
-          {{ current.interviews?.rh?.type === 'video' ? 'videocam' : current.interviews?.rh?.type === 'phone' ? 'phone' : 'business' }}
-        </span>
-        <div>
-          <div class="id-label">Format</div>
-          <div class="id-value">{{ current.interviews?.rh?.type | titlecase }}</div>
-        </div>
-      </div>
-      <div class="id-row" *ngIf="current.interviews?.rh?.location">
-        <span class="material-icons id-icon">place</span>
-        <div>
-          <div class="id-label">Location / link</div>
-          <div class="id-value">{{ current.interviews?.rh?.location }}</div>
-        </div>
-      </div>
-      <div class="id-row" *ngIf="current.interviews?.rh?.notes">
-        <span class="material-icons id-icon">notes</span>
-        <div>
-          <div class="id-label">Notes from HR</div>
-          <div class="id-value">{{ current.interviews?.rh?.notes }}</div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <div class="interview-cards-grid" *ngIf="current.interviews?.rh || current.interviews?.tech">
 
-  <!-- Entretien technique -->
-  <div *ngIf="current.interviews?.tech" class="interview-details-section">
-    <div class="interview-details-title">💻 Technical Interview</div>
-    <div class="interview-details">
-      <div class="id-row" *ngIf="current.interviews?.tech?.scheduledAt">
-        <span class="material-icons id-icon">event</span>
-        <div>
-          <div class="id-label">Date & time</div>
-          <div class="id-value">{{ formatDateTime(current.interviews?.tech?.scheduledAt) }}</div>
-        </div>
+    <!-- RH Interview card -->
+    <div class="interview-card interview-card-rh" *ngIf="current.interviews?.rh">
+      <div class="ic-header">
+        <span class="material-icons ic-icon-rh">record_voice_over</span>
+        <span class="ic-title">RH Interview</span>
       </div>
-      <div class="id-row" *ngIf="current.interviews?.tech?.type">
-        <span class="material-icons id-icon">
-          {{ current.interviews?.tech?.type === 'video' ? 'videocam' : current.interviews?.tech?.type === 'phone' ? 'phone' : 'business' }}
-        </span>
-        <div>
-          <div class="id-label">Format</div>
-          <div class="id-value">{{ current.interviews?.tech?.type | titlecase }}</div>
+      <div class="interview-details">
+        <div class="id-row" *ngIf="current.interviews?.rh?.scheduledAt">
+          <span class="material-icons id-icon">event</span>
+          <div>
+            <div class="id-label">Date & time</div>
+            <div class="id-value">{{ formatDateTime(current.interviews?.rh?.scheduledAt) }}</div>
+          </div>
         </div>
-      </div>
-      <div class="id-row" *ngIf="current.interviews?.tech?.location">
-        <span class="material-icons id-icon">place</span>
-        <div>
-          <div class="id-label">Location / link</div>
-          <div class="id-value">{{ current.interviews?.tech?.location }}</div>
+        <div class="id-row" *ngIf="current.interviews?.rh?.location">
+          <span class="material-icons id-icon">place</span>
+          <div>
+            <div class="id-label">Location</div>
+            <div class="id-value">{{ current.interviews?.rh?.location }}</div>
+          </div>
         </div>
-      </div>
-      <div class="id-row" *ngIf="current.interviews?.tech?.notes">
-        <span class="material-icons id-icon">notes</span>
-        <div>
-          <div class="id-label">Notes</div>
-          <div class="id-value">{{ current.interviews?.tech?.notes }}</div>
+        <div class="id-row" *ngIf="current.interviews?.rh?.notes">
+          <span class="material-icons id-icon">notes</span>
+          <div>
+            <div class="id-label">Notes from HR</div>
+            <div class="id-value">{{ current.interviews?.rh?.notes }}</div>
+          </div>
         </div>
       </div>
     </div>
+
+    <!-- Technical Interview card -->
+    <div class="interview-card interview-card-tech" *ngIf="current.interviews?.tech">
+      <div class="ic-header">
+        <span class="material-icons ic-icon-tech">computer</span>
+        <span class="ic-title">Technical Interview</span>
+      </div>
+      <div class="interview-details">
+        <div class="id-row" *ngIf="current.interviews?.tech?.scheduledAt">
+          <span class="material-icons id-icon">event</span>
+          <div>
+            <div class="id-label">Date & time</div>
+            <div class="id-value">{{ formatDateTime(current.interviews?.tech?.scheduledAt) }}</div>
+          </div>
+        </div>
+        <div class="id-row" *ngIf="current.interviews?.tech?.location">
+          <span class="material-icons id-icon">place</span>
+          <div>
+            <div class="id-label">Location</div>
+            <div class="id-value">{{ current.interviews?.tech?.location }}</div>
+          </div>
+        </div>
+        <div class="id-row" *ngIf="current.interviews?.tech?.notes">
+          <span class="material-icons id-icon">notes</span>
+          <div>
+            <div class="id-label">Notes</div>
+            <div class="id-value">{{ current.interviews?.tech?.notes }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </ng-container>
               <!-- Stage 6: Decision ───────────────────────────────────── -->

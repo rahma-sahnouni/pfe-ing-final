@@ -75,14 +75,14 @@ export class LoginComponent implements OnInit {
     const password = this.loginForm.get('password');
 
     if (email?.invalid) {
-      if (email.errors?.['required']) this.emailError = 'L\'adresse email est requise.';
-      else if (email.errors?.['email']) this.emailError = 'Format d\'email invalide (ex: nom@domaine.com).';
+      if (email.errors?.['required']) this.emailError = 'Email address is required.';
+      else if (email.errors?.['email']) this.emailError = 'Invalid email format (e.g. name@domain.com).';
       valid = false;
     }
 
     if (password?.invalid) {
-      if (password.errors?.['required']) this.passwordError = 'Le mot de passe est requis.';
-      else if (password.errors?.['minlength']) this.passwordError = 'Le mot de passe doit contenir au moins 6 caractères.';
+      if (password.errors?.['required']) this.passwordError = 'Password is required.';
+      else if (password.errors?.['minlength']) this.passwordError = 'Password must be at least 6 characters.';
       valid = false;
     }
 
@@ -119,7 +119,7 @@ export class LoginComponent implements OnInit {
         if (status === 401) {
           // Wrong credentials
           this.errorType = 'credentials';
-          this.errorMessage = 'Email ou mot de passe incorrect. Vérifiez vos informations.';
+          this.errorMessage = 'Incorrect email or password. Please check your credentials.';
           // Shake the form
           this.triggerShake();
         } else if (status === 423) {
@@ -141,7 +141,7 @@ export class LoginComponent implements OnInit {
         } else {
           // Generic server error
           this.errorType = 'server';
-          this.errorMessage = 'Une erreur serveur est survenue. Réessayez plus tard.';
+          this.errorMessage = 'A server error occurred. Please try again later.';
         }
       }
     });

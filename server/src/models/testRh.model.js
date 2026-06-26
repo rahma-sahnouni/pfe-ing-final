@@ -137,8 +137,9 @@ const TestRhSchema = new mongoose.Schema(
       enum: ["draft", "active", "archived"],
       default: "active",
     },
-    themes:    [themeSchema],
-    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    themes:           [themeSchema],
+    timeLimitMinutes: { type: Number, default: null },
+    createdBy:        { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }
 );

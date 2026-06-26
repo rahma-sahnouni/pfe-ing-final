@@ -265,13 +265,8 @@ openDetailsModal(job: JobOffer): void {
 
   // ── Job CRUD handlers ────────────────────────────────
 onJobCreated(savedJob: JobOffer): void {
-  this.jobs = [savedJob, ...this.jobs];  // new array reference triggers detection
+  this.jobs = [savedJob, ...this.jobs];
   this.showCreateModal = false;
-
-  // Refresh automatique de la page
-  setTimeout(() => {
-    window.location.reload();
-  }, 100);
 }
   onJobUpdated(updated: JobOffer): void {
     const idx = this.jobs.findIndex(j => j._id === updated._id);

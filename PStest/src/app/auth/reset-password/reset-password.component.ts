@@ -110,14 +110,14 @@ export class ResetPasswordComponent implements OnInit, OnDestroy {
     const cp = this.resetForm.get('confirmPassword');
 
     if (pw?.invalid) {
-      if (pw.errors?.['required'])   this.passwordError = 'Le mot de passe est requis.';
-      else if (pw.errors?.['minlength']) this.passwordError = 'Le mot de passe doit contenir au moins 8 caractères.';
+      if (pw.errors?.['required'])   this.passwordError = 'Password is required.';
+      else if (pw.errors?.['minlength']) this.passwordError = 'Password must be at least 8 characters.';
       valid = false;
     }
 
     if (cp?.invalid) {
-      if (cp.errors?.['required'])  this.confirmError = 'Veuillez confirmer votre mot de passe.';
-      else if (cp.errors?.['mismatch']) this.confirmError = 'Les mots de passe ne correspondent pas.';
+      if (cp.errors?.['required'])  this.confirmError = 'Please confirm your password.';
+      else if (cp.errors?.['mismatch']) this.confirmError = 'Passwords do not match.';
       valid = false;
     }
 
@@ -144,7 +144,7 @@ export class ResetPasswordComponent implements OnInit, OnDestroy {
         if (status === 400) {
           this.tokenInvalid = true;
         } else {
-          this.errorMessage = 'Une erreur serveur est survenue. Réessayez plus tard.';
+          this.errorMessage = 'A server error occurred. Please try again later.';
         }
       }
     });

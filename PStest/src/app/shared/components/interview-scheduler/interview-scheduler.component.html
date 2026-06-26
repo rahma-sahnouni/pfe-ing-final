@@ -233,8 +233,16 @@
           <div class="plan-card-body">
             <form [formGroup]="dayForm" (ngSubmit)="addDay()" class="day-form">
               <div class="fg"><label>Date</label><input type="date" formControlName="date" class="fi" /></div>
-              <div class="fg"><label>Start</label><input type="time" formControlName="startTime" class="fi" /></div>
-              <div class="fg"><label>End</label><input type="time" formControlName="endTime" class="fi" /></div>
+              <div class="fg">
+                <label>Start</label>
+                <input type="text" formControlName="startTime" class="fi"
+                       placeholder="HH:mm" pattern="^([01]?[0-9]|2[0-3]):[0-5][0-9]$" />
+              </div>
+              <div class="fg">
+                <label>End</label>
+                <input type="text" formControlName="endTime" class="fi"
+                       placeholder="HH:mm" pattern="^([01]?[0-9]|2[0-3]):[0-5][0-9]$" />
+              </div>
               <div class="fg fg-sm"><label>Duration</label><input type="number" formControlName="durationMinutes" class="fi" min="15" step="5" /></div>
               <div class="fg fg-sm"><label>Break</label><input type="number" formControlName="breakMinutes" class="fi" min="0" step="5" /></div>
               <div class="fg fg-btn"><label>&nbsp;</label><button type="submit" class="btn-add-day" [disabled]="dayForm.invalid"><i class="fa-solid fa-plus"></i></button></div>

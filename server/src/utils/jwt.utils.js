@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
  */
 const generateAccessToken = (payload) => {
   return jwt.sign(payload, process.env.JWT_ACCESS_SECRET, {
-    expiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '15m',
+    expiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '3h',
     issuer: 'auth-backend',
     audience: 'auth-client'
   });

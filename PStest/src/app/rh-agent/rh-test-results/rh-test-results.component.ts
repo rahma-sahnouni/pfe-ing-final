@@ -67,6 +67,13 @@ export class RhTestResultsComponent implements OnInit {
 
   approving = false;
 
+  private readonly MODEL_CRITERIA_KEYS: Record<string, string[]> = {
+    disc:     ['D', 'I', 'S', 'C'],
+    mbti:     ['E_I', 'S_N', 'T_F', 'J_P'],
+    big_five: ['O', 'E', 'A', 'N'],
+    eq_i:     ['self_awareness', 'self_regulation', 'motivation', 'empathy', 'social_skills'],
+  };
+
   private readonly BUILTIN_CRITERIA: Record<string, { label: string; color: string }> = {
     D:   { label: 'Dominance',                    color: '#ef4444' },
     I:   { label: 'Influence',                    color: '#f97316' },
@@ -307,14 +314,49 @@ goBack() {
 
   /* ════════ Criterion bars ════════ */
   getCriterionBreakdown(sub: TestSubmission): CriterionScore[] {
-    if (!sub.scoreBreakdown) return [];
-    return Object.entries(sub.scoreBreakdown)
-      .filter(([key, val]) => key !== 'manualNotes' && typeof val === 'number')
-      .map(([key, value]) => {
+    const breakdown = sub.scoreBreakdown ?? {};
+    const result: CriterionScore[] = [];
+    const seenKeys = new Set<string>();
+
+    for (const theme of sub.rhTest?.themes ?? []) {
+      for (const model of (theme.models ?? [])) {
+        if (model.modelType === 'custom') {
+          for (const cr of (model.customCriteria ?? [])) {
+            if (!cr.key || seenKeys.has(cr.key)) continue;
+            seenKeys.add(cr.key);
+            result.push({
+              key: cr.key,
+              label: cr.label ?? cr.key,
+              color: cr.color ?? '#6366f1',
+              percentage: typeof breakdown[cr.key] === 'number' ? breakdown[cr.key] as number : 0,
+            });
+          }
+        } else {
+          for (const key of (this.MODEL_CRITERIA_KEYS[model.modelType] ?? [])) {
+            if (seenKeys.has(key)) continue;
+            seenKeys.add(key);
+            const meta = this.BUILTIN_CRITERIA[key];
+            result.push({
+              key,
+              label: meta?.label ?? key,
+              color: meta?.color ?? '#6366f1',
+              percentage: typeof breakdown[key] === 'number' ? breakdown[key] as number : 0,
+            });
+          }
+        }
+      }
+    }
+
+    // Fallback: no rhTest structure → use scoreBreakdown keys as before
+    if (result.length === 0) {
+      for (const [key, val] of Object.entries(breakdown)) {
+        if (key === 'manualNotes' || typeof val !== 'number') continue;
         const meta = this.BUILTIN_CRITERIA[key];
-        return { key, label: meta?.label ?? key, color: meta?.color ?? '#6366f1', percentage: value as number };
-      })
-      .sort((a, b) => b.percentage - a.percentage);
+        result.push({ key, label: meta?.label ?? key, color: meta?.color ?? '#6366f1', percentage: val });
+      }
+    }
+
+    return result.sort((a, b) => b.percentage - a.percentage);
   }
 
   getDominant(sub: TestSubmission): CriterionScore | null {

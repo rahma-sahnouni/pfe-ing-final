@@ -342,7 +342,14 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
-  padding-right: 52px; /* room for score badge */
+}
+
+.header-right-badges {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  flex-shrink: 0;
 }
 .job-header h3 {
   font-size: 14.5px;
@@ -1103,3 +1110,38 @@
   opacity: .5;
   cursor: not-allowed;
 }
+
+/* ── Applied state in job card ────────────────────────────────────── */
+.applied-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.applied-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(39, 201, 138, 0.12);
+  color: #27c98a;
+  border: 1px solid rgba(39, 201, 138, 0.3);
+  white-space: nowrap;
+}
+
+.ai-score-chip {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ai-score-chip.score-high   { background: rgba(39,201,138,0.14); color: #27c98a; }
+.ai-score-chip.score-medium { background: rgba(245,166,35,0.14); color: #f5a623; }
+.ai-score-chip.score-low    { background: rgba(242,92,110,0.14); color: #f25c6e; }

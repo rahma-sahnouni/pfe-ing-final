@@ -3,7 +3,7 @@ import {
 } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Subject } from 'rxjs';
-import { takeUntil, catchError } from 'rxjs/operators';
+import { takeUntil, catchError, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { of } from 'rxjs';
 
 import { TestRhService} from '../../_services/test-rh.service';
@@ -19,7 +19,7 @@ type View = 'overview' | 'add-theme' | { theme: Theme } | { theme: Theme; model:
 @Component({
   selector: 'app-test-configurator',
   templateUrl: './test-configurator.component.html',
-  styleUrls: ['./test-configurator.component.scss'],
+  styleUrls: ['./test-configurator.component.css'],
 })
 export class TestConfiguratorComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
@@ -63,6 +63,7 @@ export class TestConfiguratorComponent implements OnInit, OnDestroy {
     this.svc.getBuiltinModels().subscribe(bm => { this.builtinModels = bm; });
     this.loadJob();
     this.load();
+    this.initDurationAutoSave();
   }
 
   loadJob() {
@@ -85,6 +86,7 @@ export class TestConfiguratorComponent implements OnInit, OnDestroy {
       )
       .subscribe(test => {
         this.test = test;
+        this.draftDuration = test?.timeLimitMinutes ?? null;
         this.loading = false;
       });
   }
@@ -93,6 +95,14 @@ export class TestConfiguratorComponent implements OnInit, OnDestroy {
 
   goOverview()               { this.view = 'overview'; }
   goAddTheme()               { this.view = 'add-theme'; this.newThemeName = ''; this.newThemeCategory = 'personality'; }
+
+  onCategorySelect(cat: ThemeCategory) {
+    const autoLabels = Object.values(CATEGORY_META).map(m => m.label);
+    if (!this.newThemeName || autoLabels.includes(this.newThemeName)) {
+      this.newThemeName = CATEGORY_META[cat].label;
+    }
+    this.newThemeCategory = cat;
+  }
   goTheme(theme: Theme)      { this.view = { theme }; this.showAddModel = false; }
   goModel(theme: Theme, model: TestModel) { this.view = { theme, model }; this.editingQuestion = null; }
 
@@ -312,6 +322,36 @@ export class TestConfiguratorComponent implements OnInit, OnDestroy {
 
   themeQuestionCount(theme: Theme): number {
     return theme.models.reduce((s, m) => s + m.questions.length, 0);
+  }
+
+  /* ── Complete test ──────────────────────────────────────────────────────── */
+
+  /* ── Duration (auto-save) ───────────────────────────────────────────────── */
+
+  draftDuration:   number | null = null;
+  durationSaving = false;
+  durationSaved  = false;
+  private durationChange$ = new Subject<number | null>();
+
+  private initDurationAutoSave(): void {
+    this.durationChange$
+      .pipe(debounceTime(600), distinctUntilChanged(), takeUntil(this.destroy$))
+      .subscribe(val => {
+        this.durationSaving = true;
+        this.durationSaved  = false;
+        this.svc.updateTest(this.jobId, { timeLimitMinutes: val })
+          .subscribe(t => {
+            this.test          = t;
+            this.durationSaving = false;
+            this.durationSaved  = true;
+            setTimeout(() => { this.durationSaved = false; }, 2000);
+          });
+      });
+  }
+
+  onDurationChange(val: number | null): void {
+    this.draftDuration = val;
+    this.durationChange$.next(val);
   }
 
   /* ── Complete test ──────────────────────────────────────────────────────── */

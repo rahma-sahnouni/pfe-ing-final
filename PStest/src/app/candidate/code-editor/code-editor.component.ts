@@ -178,7 +178,7 @@ ngOnChanges(changes: SimpleChanges): void {
     if (this.running) return;
       // ← AJOUTE CECI
   if (!this.examples || this.examples.length === 0) {
-    this.log('error', 'Aucun cas de test disponible.');
+    this.log('error', 'No test cases available.');
     this.activeTab = 'console';
     return;
   }
@@ -197,7 +197,7 @@ ngOnChanges(changes: SimpleChanges): void {
       memoryKb:    null,
       stderr:      null,
       status:      'Processing…',
-      statusLabel: 'Exécution…',
+      statusLabel: 'Running…',
       statusClass: 'status-running',
     }));
 
@@ -206,7 +206,7 @@ ngOnChanges(changes: SimpleChanges): void {
       expected: ex.output,
     }));
 
-    this.log('info', `[${new Date().toLocaleTimeString()}] Exécution en cours (${this.language})…`);
+    this.log('info', `[${new Date().toLocaleTimeString()}] Running (${this.language})…`);
 
     this.runner.runCode(this.language, this.code, testCases)
       .pipe(takeUntil(this.destroy$))
@@ -217,7 +217,7 @@ ngOnChanges(changes: SimpleChanges): void {
 
             this.testResults = [...res.results.map(r => ({
               ...r,
-              statusLabel: r.pass ? 'Réussi' : 'Échoué',
+              statusLabel: r.pass ? 'Passed' : 'Failed',
               statusClass: r.pass ? 'status-pass' : 'status-fail',
             }))];
 
@@ -227,13 +227,13 @@ ngOnChanges(changes: SimpleChanges): void {
 
             this.log(
               this.allPassed ? 'success' : 'error',
-              `🏆 Score: ${this.score}/100 — ${this.allPassed ? 'TOUS LES TESTS PASSÉS ✓' : 'CERTAINS TESTS ÉCHOUÉS ✗'}`,
+              `🏆 Score: ${this.score}/100 — ${this.allPassed ? 'ALL TESTS PASSED ✓' : 'SOME TESTS FAILED ✗'}`,
             );
 
             res.results.forEach((r, i) => {
               this.log(
                 r.pass ? 'success' : 'error',
-                `Cas ${i + 1}: ${r.pass ? 'RÉUSSI' : 'ÉCHOUÉ'} — ` +
+                `Case ${i + 1}: ${r.pass ? 'PASSED' : 'FAILED'} — ` +
                 `Obtenu: ${JSON.stringify(r.got)}, Attendu: ${JSON.stringify(r.expected)}` +
                 (r.time != null ? ` (${r.time}ms)` : ''),
               );
@@ -246,9 +246,9 @@ ngOnChanges(changes: SimpleChanges): void {
         },
         error: (err) => {
           this.ngZone.run(() => {
-            this.log('error', `Erreur serveur: ${err.message || err.error?.message || 'Inconnue'}`);
+            this.log('error', `Server error: ${err.message || err.error?.message || 'Unknown'}`);
             this.testResults.forEach(r => {
-              r.statusLabel = 'Erreur';
+              r.statusLabel = 'Error';
               r.statusClass = 'status-fail';
             });
             this.running = false;

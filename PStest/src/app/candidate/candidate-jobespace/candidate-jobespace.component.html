@@ -58,7 +58,14 @@
     <div *ngFor="let job of filteredJobs" class="job-card">
       <div class="job-header">
         <h3>{{ job.title }}</h3>
-        <span class="contract-badge">{{ getContractLabel(job.contractType) }}</span>
+        <div class="header-right-badges">
+          <span class="contract-badge">{{ getContractLabel(job.contractType) }}</span>
+          <span *ngIf="hasApplied(job._id) && getAiScore(job._id) !== null"
+                class="ai-score-chip"
+                [ngClass]="getScoreClass(getAiScore(job._id))">
+            {{ getAiScore(job._id) }}%
+          </span>
+        </div>
       </div>
       <div class="job-company"><span class="icon">🏢</span> NexGen AI HR Solutions</div>
       <div class="job-location" *ngIf="job.location"><span class="icon">📍</span> {{ job.location }}</div>
@@ -71,7 +78,12 @@
       </div>
       <div class="card-buttons">
         <button class="btn-details" (click)="openJobDetails(job)">View details</button>
-        <button class="btn-apply" (click)="openApplyModal(job)">Apply</button>
+        <ng-container *ngIf="hasApplied(job._id); else applyBtnAll">
+          <span class="applied-badge">✓ Applied</span>
+        </ng-container>
+        <ng-template #applyBtnAll>
+          <button class="btn-apply" (click)="openApplyModal(job)">Apply</button>
+        </ng-template>
       </div>
     </div>
   </div>
@@ -129,10 +141,15 @@
     <!-- Buttons -->
     <div class="card-buttons">
       <button class="btn-details" (click)="openJobDetails(rec.job)">View offer</button>
-    <button class="btn-apply" (click)="openApplyModal(rec.job)"
-  [title]="(rec.blockedByPrereqs?.length ?? 0) > 0 ? 'Missing required prerequisites – you can still apply' : ''">
-  Apply
-</button>
+      <ng-container *ngIf="hasApplied(rec.job._id); else applyBtnAi">
+        <span class="applied-badge">✓ Applied</span>
+      </ng-container>
+      <ng-template #applyBtnAi>
+        <button class="btn-apply" (click)="openApplyModal(rec.job)"
+          [title]="(rec.blockedByPrereqs?.length ?? 0) > 0 ? 'Missing required prerequisites – you can still apply' : ''">
+          Apply
+        </button>
+      </ng-template>
     </div>
   </div>
 </div>

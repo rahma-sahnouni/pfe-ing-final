@@ -179,9 +179,9 @@ export class InterviewSchedulerComponent implements OnInit, OnDestroy {
   showUpcomingInterviewsBanner = true;
 
   recoOptions = [
-    { value: 'hire' as Recommendation, label: 'Recruter', icon: 'fa-circle-check', cls: 'hire' },
-    { value: 'consider' as Recommendation, label: 'À considérer', icon: 'fa-circle-question', cls: 'consider' },
-    { value: 'reject' as Recommendation, label: 'Rejeter', icon: 'fa-circle-xmark', cls: 'reject' },
+    { value: 'hire' as Recommendation, label: 'Hire', icon: 'fa-circle-check', cls: 'hire' },
+    { value: 'consider' as Recommendation, label: 'To consider', icon: 'fa-circle-question', cls: 'consider' },
+    { value: 'reject' as Recommendation, label: 'Reject', icon: 'fa-circle-xmark', cls: 'reject' },
   ];
 
   configuredJobIds: Set<string> = new Set();
@@ -516,23 +516,20 @@ export class InterviewSchedulerComponent implements OnInit, OnDestroy {
     } as any).subscribe({
       next: () => {
         this.savingConfig = false;
-        // ─── FIX : recharger les DEUX configs après save ───────────────────
-        // Garantit que l'autre stage reste visible après un save partiel
         this.loadInterviewConfig();
-        alert('✅ Configuration sauvegardée avec succès !');
       },
       error: (err) => {
         this.savingConfig = false;
         console.error('Save error:', err);
-        alert('❌ Erreur lors de la sauvegarde : ' + (err.error?.message || err.message));
+        alert('❌ Error saving: ' + (err.error?.message || err.message));
       },
     });
   }
 
   autoAssign(): void {
     if (!this.selectedJobId || this.selectedJobId === 'all') return;
-    if (!this.myConfig.ranges.length)    { alert('Ajoutez au moins un jour.'); return; }
-    if (!this.filteredCandidates.length) { alert('Aucun candidat éligible.'); return; }
+    if (!this.myConfig.ranges.length)    { alert('Add at least one day.'); return; }
+    if (!this.filteredCandidates.length) { alert('No eligible candidates.'); return; }
     this.assigning = true;
     this.sessionService.autoAssignSlots(this.selectedJobId, {
       stage:  this.myStage,
@@ -551,9 +548,9 @@ export class InterviewSchedulerComponent implements OnInit, OnDestroy {
       error: (err) => {
         this.assigning = false;
         if (err.status === 409) {
-          alert(err.error?.message || "Conflit détecté : certains candidats ont déjà une interview programmée pour l'autre étape le même day.");
+          alert(err.error?.message || "Conflict detected: some candidates already have an interview scheduled for the other stage on the same day.");
         } else {
-          alert("Erreur lors de l'auto‑assignation.");
+          alert("Error during auto-assignment.");
         }
       },
     });
@@ -603,9 +600,9 @@ export class InterviewSchedulerComponent implements OnInit, OnDestroy {
       error: (err) => {
         this.scheduleSaving = false;
         if (err.status === 409) {
-          alert(err.error?.message || "Ce candidat a déjà un entretien pour l'autre étape le même jour.");
+          alert(err.error?.message || "This candidate already has an interview for the other stage on the same day.");
         } else {
-          alert('Erreur lors de la planification.');
+          alert('Error scheduling interview.');
         }
       },
     });
@@ -950,9 +947,9 @@ export class InterviewSchedulerComponent implements OnInit, OnDestroy {
 
   getStatusLabel(status: string): string {
     const map: Record<string, string> = {
-      scheduled:   'Planifié',
-      in_progress: 'En cours',
-      completed:   'Terminé',
+      scheduled:   'Scheduled',
+      in_progress: 'In progress',
+      completed:   'Completed',
     };
     return map[status] || status;
   }
@@ -994,8 +991,8 @@ export class InterviewSchedulerComponent implements OnInit, OnDestroy {
   deleteStageConfiguration(stage: 'rh' | 'technical evaluator'): void {
     if (!this.selectedJobObj) return;
     const confirmMsg = stage === 'rh'
-      ? '⚠️ Supprimer toute la configuration RH (slots, grille) et toutes les affectations planifiées ? Cette action est irréversible.'
-      : '⚠️ Supprimer toute la configuration TECH (slots, grille) et toutes les affectations planifiées ? Cette action est irréversible.';
+      ? '⚠️ Delete all RH configuration (slots, grid) and all scheduled assignments? This action is irreversible.'
+      : '⚠️ Delete all TECH configuration (slots, grid) and all scheduled assignments? This action is irreversible.';
     if (!confirm(confirmMsg)) return;
 
     this.loading = true;
@@ -1003,11 +1000,11 @@ export class InterviewSchedulerComponent implements OnInit, OnDestroy {
       next: () => {
         this.loading = false;
         this.selectJob(this.selectedJobObj!);
-        alert(`Configuration ${stage === 'rh' ? 'RH' : 'Tech'} supprimée avec succès.`);
+        alert(`${stage === 'rh' ? 'RH' : 'Tech'} configuration deleted successfully.`);
       },
       error: (err) => {
         this.loading = false;
-        alert('Erreur lors de la suppression : ' + (err.error?.message || err.message));
+        alert('Error deleting: ' + (err.error?.message || err.message));
       }
     });
   }

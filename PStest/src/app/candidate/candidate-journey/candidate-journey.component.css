@@ -959,3 +959,37 @@
   color: var(--color-danger, #ef4444);
 }
 
+/* ── Interview side-by-side cards ────────────────────────────────── */
+.interview-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.interview-card {
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.interview-card-rh   { border: 1px solid rgba(124, 58, 237, 0.35); }
+.interview-card-tech { border: 1px solid rgba(59, 130, 246, 0.35); }
+
+.ic-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ic-icon-rh  { font-size: 18px !important; color: #a78bfa; }
+.ic-icon-tech { font-size: 18px !important; color: #60a5fa; }
+
+.ic-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+

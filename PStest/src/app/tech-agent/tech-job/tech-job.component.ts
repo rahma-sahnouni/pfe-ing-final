@@ -201,14 +201,11 @@ goToTestDetails(testId: string | undefined): void {
       description: '',
       difficulty: 'medium' as 'easy' | 'medium' | 'hard',
       timeLimitMinutes: 30,
-      tags: '',
       isPublic: false,
       testType: null as TestType | null,
 
       ps: {
-        examples:           [this.freshExample()] as StructuredExample[],
-        expectedComplexity: '',
-        constraints:        [{ label: '' }] as { label: string }[],
+        examples: [this.freshExample()] as StructuredExample[],
       },
 
       qcm: {
@@ -305,12 +302,6 @@ goToTestDetails(testId: string | undefined): void {
   removeParam(exIdx: number, pIdx: number): void {
     const params = this.testForm.ps.examples[exIdx].params;
     if (params.length > 1) params.splice(pIdx, 1);
-  }
-
-  addConstraint(): void { this.testForm.ps.constraints.push({ label: '' }); }
-  removeConstraint(i: number): void {
-    if (this.testForm.ps.constraints.length > 1)
-      this.testForm.ps.constraints.splice(i, 1);
   }
 
   // ── QCM helpers ───────────────────────────────────────────────────────────
@@ -455,7 +446,6 @@ goToTestDetails(testId: string | undefined): void {
       description:      this.testForm.description,
       difficulty:       this.testForm.difficulty,
       timeLimitMinutes: this.testForm.timeLimitMinutes,
-      tags:             this.testForm.tags.split(',').map(t => t.trim()).filter(Boolean),
       isPublic:         this.testForm.isPublic,
       testType:         this.testForm.testType,
     };
@@ -465,8 +455,6 @@ goToTestDetails(testId: string | undefined): void {
         examples: this.testForm.ps.examples
           .filter(ex => ex.params.some(p => p.name.trim() && p.value.trim()))
           .map(ex => this.serializeExample(ex)),
-        constraints:        this.testForm.ps.constraints.filter(c => c.label.trim()),
-        expectedComplexity: this.testForm.ps.expectedComplexity,
       };
     }
 
@@ -595,17 +583,10 @@ openEditModal(test: any, job: JobOffer): void {
     description:      test.description ?? '',
     difficulty:       test.difficulty ?? 'medium',
     timeLimitMinutes: test.timeLimitMinutes ?? 30,
-    tags:             Array.isArray(test.tags) ? test.tags.join(', ') : (test.tags ?? ''),
     isPublic:         test.isPublic ?? false,
     testType:         test.testType ?? null,
 
     ps: {
-      expectedComplexity: test.problemSolving?.expectedComplexity ?? '',
-      constraints: test.problemSolving?.constraints?.length
-        ? test.problemSolving.constraints.map((c: any) => ({
-            label: typeof c === 'string' ? c : (c.label ?? '')
-          }))
-        : [{ label: '' }],
       examples: test.problemSolving?.examples?.length
         ? test.problemSolving.examples.map((ex: any) => ({
             params: Object.entries(ex.input ?? {}).map(([name, value]) => ({
@@ -662,7 +643,6 @@ submitEditTest(): void {
     description:      this.editForm.description,
     difficulty:       this.editForm.difficulty,
     timeLimitMinutes: this.editForm.timeLimitMinutes,
-    tags:             this.editForm.tags.split(',').map((t: string) => t.trim()).filter(Boolean),
     isPublic:         this.editForm.isPublic,
     testType:         this.editForm.testType,
   };
@@ -675,8 +655,6 @@ submitEditTest(): void {
       examples: this.editForm.ps.examples
         .filter((ex: any) => ex.params.some((p: any) => p.name.trim() && p.value.trim()))
         .map((ex: any) => this.serializeExample(ex)),
-      constraints:        this.editForm.ps.constraints.filter((c: any) => c.label.trim()),
-      expectedComplexity: this.editForm.ps.expectedComplexity,
     };
   }
 
@@ -723,10 +701,6 @@ addEditParam(ei: number): void {
 removeEditParam(ei: number, pi: number): void {
   const p = this.editForm.ps.examples[ei].params;
   if (p.length > 1) p.splice(pi, 1);
-}
-addEditConstraint(): void { this.editForm.ps.constraints.push({ label: '' }); }
-removeEditConstraint(i: number): void {
-  if (this.editForm.ps.constraints.length > 1) this.editForm.ps.constraints.splice(i, 1);
 }
 addEditQcmQuestion(): void {
   this.editForm.qcm.questions.push({

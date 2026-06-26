@@ -75,7 +75,7 @@
             <div class="notif-list">
               <ng-container *ngIf="notifService.notifications$ | async as notifs">
                 <div *ngIf="notifs.length === 0" class="notif-empty">
-                  Aucune notification
+                  No notifications
                 </div>
                 <div *ngFor="let n of notifs" class="notif-item" [class.unread]="!n.read">
                   <span class="notif-type-icon">

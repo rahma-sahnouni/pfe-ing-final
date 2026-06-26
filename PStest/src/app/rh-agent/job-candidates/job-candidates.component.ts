@@ -116,8 +116,18 @@ export class JobCandidatesComponent implements OnInit {
   }
 
   preSelectAndClose(c: any, val: boolean): void {
+    const status = val ? 'Accepted' : 'Rejected';
     this.togglePreselect(c, val);
+    this.changeStatus(c, status);
     this.closePanel();
+  }
+
+  changeStatus(c: any, status: string): void {
+    this.candidateService.updateApplicationStatus(c._id, this.jobId, status as any)
+      .subscribe({
+        next: () => { c.applicationStatus = status; },
+        error: (e) => console.error('Status update failed', e),
+      });
   }
 
   // ── Pre-select ─────────────────────────────────────────────
@@ -227,5 +237,68 @@ export class JobCandidatesComponent implements OnInit {
     const jobSkills: string[] = (this.job?.skills || []).map((s: any) => s.name || s);
     const cvSkills:  string[] = (c.cvExtracted?.skills || []).map((s: string) => s.toLowerCase());
     return jobSkills.filter(s => !cvSkills.includes(s.toLowerCase()));
+  }
+
+  prereqIcon(type: string): string {
+    const map: Record<string, string> = {
+      'Certification': '📜', 'Language': '🌐', 'Experience': '💼',
+      'Education': '🎓', 'Location': '📍', 'Custom': '💡', 'Skill': '🔧',
+    };
+    return map[type] || '🔧';
+  }
+
+  getAllMatched(c: any): { type: string; label: string; obligatory?: boolean }[] {
+    const skills = (c.matchedSkills?.length ? c.matchedSkills : this.getMatchedSkills(c))
+      .map((s: string) => ({ type: 'Skill', label: s }));
+    const prereqs = c.prereqDetails?.length
+      ? c.prereqDetails.filter((p: any) => p.matched).map((p: any) => ({ type: p.type, label: p.label, obligatory: p.obligatory }))
+      : this._computeFrontendPrereqs(c).matched;
+    return [...skills, ...prereqs];
+  }
+
+  getAllMissing(c: any): { type: string; label: string; obligatory?: boolean }[] {
+    const skills = (c.missingSkills?.length ? c.missingSkills : this.getMissingSkills(c))
+      .map((s: string) => ({ type: 'Skill', label: s }));
+    const prereqs = c.prereqDetails?.length
+      ? c.prereqDetails.filter((p: any) => !p.matched).map((p: any) => ({ type: p.type, label: p.label, obligatory: p.obligatory }))
+      : this._computeFrontendPrereqs(c).missing;
+    return [...skills, ...prereqs];
+  }
+
+  private _computeFrontendPrereqs(c: any): { matched: any[]; missing: any[] } {
+    const matched: any[] = [];
+    const missing: any[] = [];
+    const prereqs: any[] = this.job?.prerequisites || [];
+    const cvLangs  = (c.cvExtracted?.languages      || []).map((l: any) => (l.name || l).toLowerCase());
+    const cvCerts  = (c.cvExtracted?.certifications  || []).map((s: string) => s.toLowerCase());
+    const cvEdu    = (c.cvExtracted?.education        || []).map((e: any) => (e.degree || '').toLowerCase());
+    const expYears = c.experience ?? c.cvExtracted?.yearsExperience ?? 0;
+
+    for (const req of prereqs) {
+      const val  = (req.value || req.customLabel || '').toLowerCase();
+      const item = { type: req.type, label: req.value || req.customLabel };
+      let ok = false;
+      switch (req.type) {
+        case 'Language':      ok = cvLangs.some((l: string) => l.includes(val) || val.includes(l)); break;
+        case 'Certification': ok = cvCerts.some((s: string) => s.includes(val) || val.includes(s)); break;
+        case 'Education':     ok = cvEdu.some((d: string)   => d.includes(val) || val.includes(d)); break;
+        case 'Experience':    ok = expYears >= (parseInt(val) || 0); break;
+        case 'Location': {
+          const cLoc = (c.location || '').toLowerCase();
+          ok = !!cLoc && (cLoc.includes(val) || val.includes(cLoc));
+          break;
+        }
+        default: ok = false;
+      }
+      (ok ? matched : missing).push(item);
+    }
+
+    if (!prereqs.some((p: any) => p.type === 'Experience') && this.job?.experienceLevel) {
+      const lvl = this.job.experienceLevel;
+      const min = lvl.includes('3-5') ? 3 : lvl.includes('5-8') ? 5 : lvl.includes('8+') ? 8 : 0;
+      (expYears >= min ? matched : missing).push({ type: 'Experience', label: lvl });
+    }
+
+    return { matched, missing };
   }
 }

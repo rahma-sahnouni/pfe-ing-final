@@ -221,7 +221,7 @@ export class UserMangementComponent implements OnInit {
         if (err.error?.errors?.length) {
           this.errorMessage = err.error.errors.join(', ');
         } else {
-          this.errorMessage = err.error?.message || 'Erreur serveur';
+          this.errorMessage = err.error?.message || 'Server error';
         }
       }
     });

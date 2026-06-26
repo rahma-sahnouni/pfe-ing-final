@@ -1,572 +1,1489 @@
-"""
-FastAPI - Port 8000
-Extraction CV via LLM (qwen2.5:3b) + Embedding JobBERT + OCR pour PDF scannés
-Version stable sans 'format: json' (compatible tous modèles)
-"""
-
 import os
-import re
-import json
-import logging
-import httpx
-from typing import Optional, List
-from datetime import datetime
+os.environ["PYTORCH_NO_CUDA_MEMORY_CACHING"] = "1"
 
-from fastapi import FastAPI, HTTPException, File, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
+"""
+NexGenAI — Microservice Python d'extraction CV + scoring sémantique
+====================================================================
+FastAPI service on port 8000.
+
+  POST /extract      → phi4 extraction dynamique (champs pilotés par le job) + bge-m3 cosine
+  POST /extract-text → même pipeline, texte brut en entrée (pas de PDF)
+  POST /score-skills → scoring bge-m3 uniquement, sans LLM (CV déjà extrait)
+  POST /embed        → sentence-transformers BAAI/bge-m3
+  POST /index-job    → pré-calcul embeddings job en mémoire
+  GET  /health       → santé du service
+
+Architecture :
+  Phase 1 — Lecture PDF (pdfplumber 2-colonnes + OCR Tesseract fallback + PyMuPDF)
+  Phase 2 — phi4 extraction dynamique (UN seul appel, champs définis par le job)
+  Phase 3 — bge-m3 cosine scoring sur données extraites + texte brut ligne par ligne
+  Phase 4 — ESCO ontologie pour normalisation des skills (Node == Node.js)
+"""
+
+import json
+import re
+import io
+import pathlib
+import logging
+from contextlib import asynccontextmanager
+from datetime import datetime
+from functools import lru_cache
+
+import numpy as np
+import requests
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from pydantic import BaseModel
 
-import pytesseract
-from pdf2image import convert_from_bytes
+# ── Dépendances obligatoires ──────────────────────────────────────────────────
+try:
+    import fitz  # PyMuPDF
+except ImportError:
+    raise RuntimeError("PyMuPDF manquant → pip install pymupdf")
 
-# ── Config ────────────────────────────────────────────────────────────────────
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+try:
+    from docx import Document as DocxDocument
+except ImportError:
+    raise RuntimeError("python-docx manquant → pip install python-docx")
 
-OLLAMA_URL       = os.getenv("OLLAMA_URL",       "http://localhost:11434")
-EXTRACTION_MODEL = os.getenv("EXTRACTION_MODEL", "qwen2.5:3b")
-ANALYSIS_MODEL   = os.getenv("ANALYSIS_MODEL",   "llama3.2")
-POPPLER_PATH     = r"C:\poppler\poppler-26.02.0\Library\bin"
-OCR_MIN_CHARS    = 100
-
-# ── App ───────────────────────────────────────────────────────────────────────
-app = FastAPI(title="HireFlow AI Service")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
-# ── Embedding ─────────────────────────────────────────────────────────────────
-embedding_model = None
 try:
     from sentence_transformers import SentenceTransformer
-    embedding_model = SentenceTransformer(os.getenv("EMBEDDING_MODEL", "jjzha/jobbert-base-cased"))
-    logger.info("JobBERT loaded")
-except Exception as e:
-    logger.warning(f"Embedding model failed: {e}")
+except ImportError:
+    raise RuntimeError("sentence-transformers manquant → pip install sentence-transformers")
 
-# ── Schémas ───────────────────────────────────────────────────────────────────
-class EncodeJobRequest(BaseModel):
-    title: str
-    department: Optional[str] = ""
-    description: Optional[str] = ""
-    skills: Optional[List[dict]] = []
-    prerequisites: Optional[List[str]] = []
-    experienceLevel: Optional[str] = ""
+try:
+    import pdfplumber
+    _PDFPLUMBER_AVAILABLE = True
+except ImportError:
+    _PDFPLUMBER_AVAILABLE = False
 
-class ExtractRequest(BaseModel):
-    text: str
+# ── Configuration globale ─────────────────────────────────────────────────────
+OLLAMA_URL  = "http://localhost:11434/api/generate"  # NOSONAR
+QWEN_MODEL  = "phi4:latest"                          # modèle LLM retenu (F1=0.83)
+EMBED_MODEL = "BAAI/bge-m3"                          # modèle d'embeddings retenu (P@4=0.70)
+ESCO_URL    = "https://ec.europa.eu/esco/api/search"  # NOSONAR
+CHUNK_CHARS = 12_000
+NUM_CTX     = 3072
 
-class AnalyzeRequest(BaseModel):
-    cv: str
-    job: str
-    score: int
+log = logging.getLogger("nexgenai.extractor")
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s — %(message)s")
 
-# ── Helpers embedding ─────────────────────────────────────────────────────────
-def _get_embedding(text: str):
-    if not embedding_model:
+# Instance globale du modèle d'embeddings (chargé une seule fois au démarrage)
+_embed_model: SentenceTransformer | None = None
+
+# Cache en mémoire des embeddings pré-calculés par job
+# Structure : { job_id: { terme: np.ndarray } }
+_job_embs_cache: dict[str, dict[str, np.ndarray]] = {}
+
+
+# ── Cycle de vie de l'application ─────────────────────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Chargement du modèle bge-m3 au démarrage, libération à l'arrêt."""
+    global _embed_model
+    log.info("Chargement du modèle multilingue (%s)...", EMBED_MODEL)
+    _embed_model = SentenceTransformer(EMBED_MODEL)
+    if not _PDFPLUMBER_AVAILABLE:
+        log.warning("pdfplumber absent — pip install pdfplumber pour la détection 2 colonnes")
+    log.info("Modèle chargé — service prêt sur :8000")
+    yield
+    # Rien à libérer explicitement ; Python gère la mémoire
+
+
+app = FastAPI(title="NexGenAI Extractor", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def add_connection_close(request, call_next):
+    """Force la fermeture des connexions HTTP après chaque requête (évite les keep-alive bloquants)."""
+    response = await call_next(request)
+    response.headers["Connection"] = "close"
+    return response
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ESCO — Normalisation des skills via l'ontologie européenne
+# But : résoudre les variantes d'un même skill (Node == Node.js, JS == JavaScript)
+# ═════════════════════════════════════════════════════════════════════════════
+
+@lru_cache(maxsize=1000)
+def esco_get_uri(skill_name: str) -> str | None:
+    """
+    Interroge l'API ESCO pour obtenir l'URI canonique d'un skill.
+    Le cache LRU évite de refaire la même requête réseau pour le même terme.
+    Retourne None si ESCO est indisponible ou ne connaît pas le terme.
+    """
+    if not skill_name or not skill_name.strip():
         return None
     try:
-        return embedding_model.encode(text, normalize_embeddings=True).tolist()
-    except Exception:
-        return None
-
-# ── Regex fallback simples ────────────────────────────────────────────────────
-def _extract_email(text):
-    m = re.search(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}', text)
-    return m.group(0) if m else None
-
-def _extract_phone(text):
-    text_no_years = re.sub(r'\b(19|20)\d{2}\b', '', text)
-    m = re.search(r'(\+?\d[\d\s\-().]{7,14}\d)', text_no_years)
-    return m.group(1).strip() if m else None
-
-def _extract_name(text):
-    lines = [l.strip() for l in text.split('\n') if l.strip()]
-    name_pattern = re.compile(r'^[A-ZÀÂÉÈÊËÎÏÔÙÛÜÆŒ][a-zA-ZÀ-ÿ\-]+(?: [A-ZÀÂÉÈÊËÎÏÔÙÛÜÆŒ][a-zA-ZÀ-ÿ\-]+){1,2}$')
-    for line in lines[:15]:
-        if name_pattern.match(line) and not re.search(r'\d', line):
-            return line
-    return None
-
-# ─── Extraction forcée des compétences depuis le texte brut (liste statique) ───
-KNOWN_TECH_KEYWORDS = [
-    'Python','Java','JavaScript','TypeScript','C#','C++','Go','Rust','PHP','Ruby','Swift','Kotlin','Scala','R','MATLAB',
-    'Angular','React','Vue','Vue.js','Next.js','Svelte','jQuery','Bootstrap','Tailwind','HTML','CSS','SASS','Redux',
-    'Node.js','Express','NestJS','Django','Flask','FastAPI','Spring','Spring Boot','Laravel','Rails',
-    'MongoDB','MySQL','PostgreSQL','SQLite','Oracle','Redis','Elasticsearch','Cassandra','Firebase','Supabase','SQLServer',
-    'Docker','Kubernetes','Terraform','Jenkins','GitHub Actions','AWS','Azure','GCP','Heroku','Nginx','Apache',
-    'Git','GitHub','GitLab','Jira','Postman','Swagger','Linux',
-    'TensorFlow','PyTorch','scikit-learn','Keras','OpenCV','Pandas','NumPy','Matplotlib','Spark','Hadoop','Kafka',
-    'React Native','Flutter','Android','iOS','GraphQL','REST','Microservices','Blockchain','Solidity','UML','BPMN','Scrum','Agile','Arduino'
-]
-
-def _extract_skills_from_text(text):
-    found = set()
-    lower = text.lower()
-    for kw in KNOWN_TECH_KEYWORDS:
-        if re.search(r'\b' + re.escape(kw.lower()) + r'\b', lower):
-            found.add(kw)
-    return list(found)
-
-# ─── Extraction langues sans niveaux inventés ─────────────────────────────────
-def _extract_languages_from_text(text):
-    lang_map = {
-        'français': ('Français', 'fr'), 'francais': ('Français', 'fr'), 'french': ('Français', 'fr'),
-        'anglais': ('Anglais', 'en'), 'english': ('Anglais', 'en'),
-        'arabe': ('Arabe', 'ar'), 'arabic': ('Arabe', 'ar'),
-        'espagnol': ('Espagnol', 'es'), 'spanish': ('Espagnol', 'es'),
-        'allemand': ('Allemand', 'de'), 'german': ('Allemand', 'de'),
-        'italien': ('Italien', 'it'), 'italian': ('Italien', 'it'),
-    }
-    found = []
-    lower = text.lower()
-    for key, (name, code) in lang_map.items():
-        if key in lower:
-            idx = lower.find(key)
-            context = lower[max(0, idx-50):idx+50]
-            level_match = re.search(r'\b([abc][12])\b', context)
-            level = level_match.group(1).upper() if level_match else None
-            found.append({'name': name, 'code': code, 'level': level})
-    unique = {}
-    for l in found:
-        if l['code'] not in unique:
-            unique[l['code']] = l
-    return list(unique.values())
-
-# ─── Extraction certifications (sans hallucination) ────────────────────────────
-def _extract_certifications_from_text(text):
-    certs = []
-    patterns = [
-        r'certificat\s+([^\n]{5,80})',
-        r'certification\s+([^\n]{5,80})',
-        r'([A-Z][a-z]+ (?:certification|certificat)[^\n]{5,80})',
-    ]
-    for pat in patterns:
-        for match in re.finditer(pat, text, re.IGNORECASE):
-            cert = match.group(1).strip()
-            if cert and len(cert) < 100:
-                certs.append(cert)
-    seen = set()
-    unique = []
-    for c in certs:
-        if c.lower() not in seen and not re.match(r'^certificat\s*$', c.lower()):
-            seen.add(c.lower())
-            unique.append(c)
-    return unique[:10]
-
-# ─── Extraction éducation (reconnaissance des diplômes standards) ──────────────
-def _extract_education_from_text(text):
-    edu = []
-    degree_patterns = [
-        (r'cycle ingénieur[^\n]*', 'Cycle ingénieur'),
-        (r'mastère[^\n]*', 'Mastère'),
-        (r'master[^\n]*', 'Master'),
-        (r'licence[^\n]*', 'Licence'),
-        (r'bac(?:calauréat)?[^\n]*', 'Bac'),
-        (r'diplôme[^\n]*', 'Diplôme'),
-        (r'doctorat[^\n]*', 'Doctorat'),
-    ]
-    lines = text.split('\n')
-    for i, line in enumerate(lines):
-        line_lower = line.lower()
-        for pattern, degree_type in degree_patterns:
-            if re.search(pattern, line_lower):
-                institution = None
-                if i+1 < len(lines) and not re.search(r'\d{4}', lines[i+1]) and len(lines[i+1]) < 80:
-                    institution = lines[i+1].strip()
-                year = None
-                year_match = re.search(r'\b(19|20)\d{2}\b', line)
-                if year_match:
-                    year = year_match.group(0)
-                in_progress = 'en cours' in line_lower or 'present' in line_lower
-                edu.append({
-                    'degree': line.strip(),
-                    'institution': institution,
-                    'year': year,
-                    'inProgress': in_progress
-                })
-                break
-    seen = set()
-    unique = []
-    for e in edu:
-        key = e['degree'][:50]
-        if key not in seen:
-            seen.add(key)
-            unique.append(e)
-    return unique[:8]
-
-# ─── Extraction expérience (projets académiques et stages) ─────────────────────
-def _extract_experience_from_text(text):
-    exp = []
-    sections = re.split(r'\n(?:Stages|Projets académiques|Expérience professionnelle)\s*\n', text, flags=re.IGNORECASE)
-    if len(sections) < 2:
-        return []
-    relevant = sections[1]
-    lines = relevant.split('\n')
-    current = {}
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        if len(line) < 100 and not line.startswith(('•', '-', '○')):
-            if current:
-                exp.append(current)
-            current = {'title': line, 'company': None, 'duration': None, 'type': 'stage', 'description': ''}
-        else:
-            if current:
-                current['description'] += ' ' + line
-    if current:
-        exp.append(current)
-    for e in exp:
-        e['description'] = re.sub(r'\s+', ' ', e['description']).strip()
-    return exp
-
-# ─── Préprocessing multi-colonnes ──────────────────────────────────────────────
-SECTION_HEADERS_FR = [
-    'contact', 'profil', 'competences', 'skills', 'langues', 'formation', 'education',
-    'experience', 'stages', 'projets', 'certifications', 'centres d interet'
-]
-
-def _normalise_str(s: str) -> str:
-    import unicodedata
-    return unicodedata.normalize('NFD', s).encode('ascii', 'ignore').decode().lower()
-
-def _is_section_header(line: str) -> bool:
-    norm = _normalise_str(line.strip())
-    norm = re.sub(r'[^a-z\s]', '', norm).strip()
-    return any(norm == h or norm.startswith(h) for h in SECTION_HEADERS_FR)
-
-def preprocess_cv_text(raw_text: str) -> str:
-    if not raw_text or len(raw_text.strip()) < 30:
-        return raw_text
-    lines = raw_text.split('\n')
-    first_non_empty = [l for l in lines if l.strip()][:15]
-    header_count = sum(1 for l in first_non_empty if _is_section_header(l))
-    if header_count < 1:
-        return raw_text
-    sections = {}
-    header_order = []
-    current_section = '__preamble__'
-    sections[current_section] = []
-    for line in lines:
-        if _is_section_header(line):
-            norm = _normalise_str(line.strip()).replace('[^a-z\s]', '',).strip()
-            canonical = next((h for h in SECTION_HEADERS_FR if norm == h or norm.startswith(h)), norm)
-            if canonical not in sections:
-                sections[canonical] = []
-                header_order.append(canonical)
-            current_section = canonical
-        else:
-            sections.setdefault(current_section, []).append(line)
-    CANONICAL_ORDER = [
-        '__preamble__', 'contact', 'profil', 'formation', 'education', 'experience', 'stages',
-        'projets', 'competences', 'skills', 'langues', 'certifications', 'centres d interet'
-    ]
-    sorted_sections = ['__preamble__'] + sorted(header_order, key=lambda a: next((i for i, c in enumerate(CANONICAL_ORDER) if a == c or a.startswith(c)), 999))
-    parts = []
-    preamble_lines = [l for l in sections.get('__preamble__', []) if l.strip()]
-    candidate_name = None
-    remaining_preamble = []
-    name_pattern = re.compile(r'^[A-ZÀÂÉÈÊËÎÏÔÙÛÜÆŒ][a-zA-ZÀ-ÿ\-]+(?: [A-ZÀÂÉÈÊËÎÏÔÙÛÜÆŒ][a-zA-ZÀ-ÿ\-]+){1,2}$')
-    for l in preamble_lines:
-        if not candidate_name and name_pattern.match(l.strip()):
-            candidate_name = l
-        else:
-            remaining_preamble.append(l)
-    if candidate_name:
-        parts.append(candidate_name)
-        parts.append('')
-    for section_key in sorted_sections:
-        if section_key == '__preamble__':
-            if remaining_preamble:
-                parts.extend(remaining_preamble)
-                parts.append('')
-            continue
-        section_lines = sections.get(section_key, [])
-        if not section_lines or all(not l.strip() for l in section_lines):
-            continue
-        parts.append(section_key.upper())
-        parts.extend(section_lines)
-        parts.append('')
-    return '\n'.join(parts)
-
-# ─── Évaluation qualité OCR ───────────────────────────────────────────────────
-CV_SECTION_KEYWORDS = ['contact', 'compétences', 'skills', 'langues', 'formation', 'education', 'expérience', 'stage', 'projet', 'certification']
-def _assess_ocr_quality(text: str) -> dict:
-    if not text or len(text.strip()) < OCR_MIN_CHARS:
-        return {"usable": False, "reason": "too_short"}
-    sections = sum(1 for kw in CV_SECTION_KEYWORDS if kw in text.lower())
-    non_ascii = sum(1 for c in text if ord(c) > 127 and c not in 'àâéèêëîïôùûüæœ')
-    noise = non_ascii / max(len(text), 1)
-    usable = sections >= 1 and noise < 0.15
-    return {"usable": usable, "sections": sections, "noise_ratio": noise}
-
-# ─── Extraction LLM (une passe JSON, sans 'format: json' pour compatibilité) ───
-async def _extract_cv_with_llm(text: str) -> dict:
-    prompt = (
-        "<|system|>\n"
-        "You are an expert CV parser. Output ONLY valid JSON, no markdown, no explanation.\n"
-        "NEVER invent information. If something is not in the CV, use null for strings, [] for lists.\n"
-        "NEVER add certifications like 'AWS Certified' unless explicitly mentioned.\n"
-        "NEVER invent company names like 'Acme'.\n"
-        "NEVER add language levels (A1, B2, C1, etc.) unless explicitly stated.\n"
-        "<|end|>\n"
-        "<|user|>\n"
-        "Extract from this CV and return JSON following this schema:\n"
-        "{\n"
-        '  "name": "string or null",\n'
-        '  "email": "string or null",\n'
-        '  "phone": "string or null (NEVER a year)",\n'
-        '  "location": "string or null",\n'
-        '  "summary": "string or null",\n'
-        '  "yearsExperience": 0.0,\n'
-        '  "skills": ["skill1", "skill2"],\n'
-        '  "languages": [{"name": "French", "code": "fr", "level": null}],\n'
-        '  "certifications": ["Certification name"],\n'
-        '  "education": [{"degree": "...", "institution": "...", "year": "...", "inProgress": false}],\n'
-        '  "experience": [{"title": "...", "company": "...", "duration": "...", "type": "stage|job", "description": "..."}]\n'
-        "}\n\n"
-        "RULES:\n"
-        "- For languages, if level not specified, set level = null.\n"
-        "- For certifications, only include those explicitly listed.\n"
-        "- For experience, type 'stage' for internships, 'job' otherwise.\n"
-        "- Do NOT invent any data.\n"
-        f"CV TEXT:\n{text[:4500]}\n"
-        "<|end|>\n"
-        "<|assistant|>\n"
-    )
-    try:
-        async with httpx.AsyncClient(timeout=180) as client:
-            r = await client.post(
-                f"{OLLAMA_URL}/api/generate",
-                json={
-                    "model": EXTRACTION_MODEL,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {"temperature": 0, "num_predict": 1500, "num_ctx": 2048}
-                }
-            )
-        raw = r.json().get("response", "")
-        # Nettoyer la réponse pour extraire le JSON
-        raw = re.sub(r"^```(?:json)?\s*", "", raw.strip())
-        raw = re.sub(r"\s*```$", "", raw)
-        # Chercher le premier { et dernier }
-        start = raw.find('{')
-        end = raw.rfind('}')
-        if start != -1 and end != -1:
-            raw = raw[start:end+1]
-        else:
-            raise ValueError("No JSON object found")
-        parsed = json.loads(raw)
-        logger.info(f"LLM extraction OK: name={parsed.get('name')}, skills={len(parsed.get('skills', []))}")
-        return parsed
+        resp = requests.get(
+            ESCO_URL,
+            params={
+                "text":     skill_name.strip(),
+                "language": "fr",
+                "type":     "skill",
+                "full":     False,
+                "limit":    1,
+            },
+            timeout=5,
+        )
+        if resp.status_code != 200:
+            return None
+        results = resp.json().get("_embedded", {}).get("results", [])
+        if not results:
+            return None
+        return results[0].get("uri")
     except Exception as e:
-        logger.warning(f"LLM extraction failed: {e}")
+        log.debug("ESCO indisponible pour '%s': %s", skill_name, e)
         return None
 
-# ─── Validation et nettoyage (avec anti-hallucination) ────────────────────────
-def _validate_and_clean(data: dict, raw_text: str = "") -> dict:
-    defaults = {
-        "name": None, "email": None, "phone": None, "location": None, "summary": None,
-        "yearsExperience": 0, "skills": [], "languages": [], "certifications": [],
-        "education": [], "experience": []
+
+def esco_skills_match(skill_job: str, skill_cv: str) -> bool:
+    """
+    Retourne True si les deux skills partagent le même URI ESCO.
+    Exemple : "Node" et "Node.js" → même URI → True.
+    """
+    uri_job = esco_get_uri(skill_job)
+    uri_cv  = esco_get_uri(skill_cv)
+    if uri_job and uri_cv and uri_job == uri_cv:
+        log.info("   ESCO match: '%s' == '%s' (uri=%s)", skill_job, skill_cv, uri_job)
+        return True
+    return False
+
+
+def prefix_skills_match(skill_job: str, skill_cv: str) -> bool:
+    """
+    Match par préfixe après normalisation (suppression espaces/ponctuation).
+    Couvre les cas comme "React" == "ReactJS", "Python" == "Python3".
+    Les suffixes tolérés sont : js, py, ts, db, 2..9.
+    """
+    s1 = re.sub(r'[\s.\-_/]', '', skill_job.strip().lower())  # NOSONAR
+    s2 = re.sub(r'[\s.\-_/]', '', skill_cv.strip().lower())   # NOSONAR
+    if s1 == s2:
+        return True
+    KNOWN_SUFFIXES = {'js', 'py', 'ts', 'db', '2', '3', '4', '5', '6', '7', '8', '9'}
+    if s1 and s2:
+        if s2.startswith(s1) and len(s1) >= 3 and s2[len(s1):] in KNOWN_SUFFIXES:
+            return True
+        if s1.startswith(s2) and len(s2) >= 3 and s1[len(s2):] in KNOWN_SUFFIXES:
+            return True
+    return False
+
+
+def skills_match(skill_job: str, skill_cv: str) -> bool:
+    """
+    Fonction principale de matching de skills.
+    Ordre de priorité :
+      1. Égalité exacte (insensible à la casse)
+      2. Match ESCO (ontologie sémantique)
+      3. Match par préfixe normalisé
+    """
+    if not skill_job or not skill_cv:
+        return False
+    if skill_job.strip().lower() == skill_cv.strip().lower():
+        return True
+    if esco_skills_match(skill_job, skill_cv):
+        return True
+    if prefix_skills_match(skill_job, skill_cv):
+        log.info("   Prefix match: '%s' == '%s'", skill_job, skill_cv)
+        return True
+    return False
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# LECTURE PDF — 3 stratégies en cascade
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _words_to_lines(word_list: list) -> str:
+    """
+    Regroupe les mots extraits par pdfplumber en lignes de texte.
+    Les mots sont triés par position Y (ligne) puis X (colonne gauche→droite).
+    """
+    if not word_list:
+        return ""
+    lines: dict = {}
+    for w in word_list:
+        # Arrondi à 3px pour regrouper les mots sur la même ligne visuelle
+        y_key = round(w["top"] / 3) * 3
+        lines.setdefault(y_key, []).append(w)
+    result = []
+    for y_key in sorted(lines):
+        line_text = " ".join(
+            w["text"] for w in sorted(lines[y_key], key=lambda w: w["x0"])
+        ).strip()
+        if line_text:
+            result.append(line_text)
+    return "\n".join(result)
+
+
+def read_pdf(data: bytes) -> str:
+    """
+    Lit un fichier PDF et retourne son texte brut.
+
+    Stratégie 1 — Test PyMuPDF rapide :
+      Si le texte extrait est < 50 caractères → PDF scanné → passer à l'OCR.
+
+    Stratégie 2 — OCR Tesseract (fallback PDF scanné) :
+      Rastérise chaque page en image 2× puis applique Tesseract.
+      Langues détectées automatiquement (fra+eng+ara si disponibles).
+
+    Stratégie 3 — pdfplumber (PDF natif) :
+      Détecte les mises en page 2 colonnes via l'analyse de la distribution
+      horizontale des mots (x0). Si un grand écart est trouvé entre 20% et 75%
+      de la largeur de page, on lit colonne gauche (sidebar) + colonne droite
+      (main content) séparément pour éviter les mélanges de texte.
+
+    Fallback final — PyMuPDF extraction basique.
+    """
+    # ── Test rapide : PDF natif ou scanné ?
+    try:
+        doc       = fitz.open(stream=data, filetype="pdf")
+        test_text = "".join(page.get_text("text") for page in doc)
+        doc.close()
+    except Exception:
+        test_text = ""
+
+    # ── Stratégie 2 : OCR si texte insuffisant
+    if len(test_text.strip()) < 50:
+        try:
+            import pytesseract
+            from PIL import Image
+
+            _tess_exe = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+            if os.path.isfile(_tess_exe):
+                pytesseract.pytesseract.tesseract_cmd = _tess_exe
+
+            _tessdata = r'C:\Program Files\Tesseract-OCR\tessdata'
+            _avail    = [lg for lg in ('fra', 'eng', 'ara')
+                         if os.path.isfile(os.path.join(_tessdata, f'{lg}.traineddata'))]
+            _lang = '+'.join(_avail) if _avail else 'eng'
+            log.info("OCR lang: %s", _lang)
+
+            doc      = fitz.open(stream=data, filetype="pdf")
+            all_text = []
+            for i, page in enumerate(doc):
+                log.info("   OCR page %d...", i + 1)
+                pix = page.get_pixmap(matrix=fitz.Matrix(2.0, 2.0))
+                img = Image.open(io.BytesIO(pix.tobytes("png")))
+                t   = pytesseract.image_to_string(img, lang=_lang, config="--psm 3")
+                if t.strip():
+                    all_text.append(t.strip())
+            doc.close()
+            ocr_text = "\n\n".join(all_text)
+            if ocr_text.strip():
+                return ocr_text
+        except Exception as e:
+            log.warning("OCR indisponible (%s) → extraction basique", type(e).__name__)
+        return test_text.strip()
+
+    # ── Stratégie 3 : pdfplumber avec détection 2 colonnes
+    if _PDFPLUMBER_AVAILABLE:
+        try:
+            all_text = []
+            with pdfplumber.open(io.BytesIO(data)) as pdf:
+                for page_num, page in enumerate(pdf.pages):
+                    pw    = page.width
+                    words = page.extract_words(
+                        x_tolerance=3, y_tolerance=3,
+                        keep_blank_chars=False, use_text_flow=False,
+                    )
+                    if not words:
+                        t = page.extract_text()
+                        if t:
+                            all_text.append(t.strip())
+                        continue
+
+                    # Détection du point de séparation entre 2 colonnes
+                    x0_list   = [w["x0"] for w in words]
+                    x0_sorted = sorted(set(round(x, -1) for x in x0_list))
+                    max_gap, best_split = 0.0, None
+                    for i in range(len(x0_sorted) - 1):
+                        gap = x0_sorted[i + 1] - x0_sorted[i]
+                        mid = (x0_sorted[i] + x0_sorted[i + 1]) / 2
+                        # Le séparateur doit être entre 20% et 75% de la largeur
+                        if pw * 0.20 <= mid <= pw * 0.75 and gap > max_gap:
+                            max_gap, best_split = gap, mid
+
+                    is_two_col = False
+                    mid_x      = pw / 2
+                    if best_split and max_gap >= pw * 0.08:
+                        ln = sum(1 for x in x0_list if x < best_split)
+                        rn = sum(1 for x in x0_list if x >= best_split)
+                        n  = len(x0_list)
+                        # Les deux colonnes doivent chacune contenir ≥10% des mots
+                        if ln >= n * 0.10 and rn >= n * 0.10:
+                            is_two_col, mid_x = True, best_split
+
+                    log.info("   Page %d : %s", page_num + 1, "2-col" if is_two_col else "1-col")
+
+                    if is_two_col:
+                        lw = [w for w in words if w["x0"] < mid_x]   # sidebar (gauche)
+                        rw = [w for w in words if w["x0"] >= mid_x]  # main content (droite)
+                        pt = (
+                            "=== MAIN CONTENT ===\n" + _words_to_lines(rw) +
+                            "\n\n=== SIDEBAR ===\n"  + _words_to_lines(lw)
+                        )
+                    else:
+                        pt = _words_to_lines(words)
+
+                    if pt.strip():
+                        all_text.append(pt)
+            return "\n\n".join(all_text)
+        except Exception as e:
+            log.warning("pdfplumber échoué (%s) → fallback PyMuPDF", e)
+
+    # ── Fallback final : PyMuPDF extraction basique
+    doc  = fitz.open(stream=data, filetype="pdf")
+    text = "\n".join(page.get_text("text") for page in doc)
+    doc.close()
+    return text
+
+
+def read_docx(data: bytes) -> str:
+    """Extrait le texte d'un fichier DOCX paragraphe par paragraphe."""
+    doc = DocxDocument(io.BytesIO(data))
+    return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+
+
+def read_cv(data: bytes, filename: str) -> str:
+    """Route vers read_pdf ou read_docx selon l'extension du fichier."""
+    ext = pathlib.Path(filename).suffix.lower()
+    if ext == ".pdf":
+        return read_pdf(data)
+    elif ext in (".docx", ".doc"):
+        return read_docx(data)
+    raise HTTPException(status_code=400, detail=f"Format non supporté : {ext}")
+
+
+def clean_cv_text(text: str) -> str:
+    """
+    Normalise le texte brut extrait :
+    - Réduit les séquences de ≥3 sauts de ligne à 2
+    - Supprime les espaces multiples
+    - Élimine les lignes de moins de 2 caractères (artefacts)
+    """
+    text = re.sub(r'\n{3,}', '\n\n', text)  # NOSONAR
+    text = re.sub(r' {2,}', ' ', text)       # NOSONAR
+    lines = [l for l in text.split('\n') if len(l.strip()) > 1]
+    return '\n'.join(lines).strip()
+
+
+def prepare_for_qwen(text: str, max_chars: int = 4000) -> str:
+    """
+    Tronque le texte pour respecter la fenêtre de contexte de phi4 (NUM_CTX=3072 tokens).
+    Garde le début (profil/skills) et la fin (expériences récentes) du CV.
+    """
+    cleaned = clean_cv_text(text)
+    if len(cleaned) <= max_chars:
+        return cleaned
+    return cleaned[:2500] + "\n\n[...]\n\n" + cleaned[-1500:]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# RECALCUL EXPÉRIENCE — Parsing des dates et calcul des durées
+# ═════════════════════════════════════════════════════════════════════════════
+
+def recalculate_experience(extracted: dict) -> dict:
+    """
+    Recalcule le nombre de mois par poste à partir des dates extraites par phi4.
+    phi4 extrait les dates en texte libre (ex: "mars 2022", "03/2022", "2022-03").
+    Cette fonction les parse et calcule la durée réelle pour éviter les hallucinations.
+
+    Formats supportés : mois en lettres (FR/EN/AR), MM/YYYY, YYYY-MM, YYYY seul.
+    "présent", "actuel", "current", "ongoing" → datetime.now().
+    """
+    MOIS = {
+        "janvier": 1, "février": 2, "february": 2, "mars": 3, "march": 3,
+        "avril": 4, "april": 4, "mai": 5, "may": 5, "juin": 6, "june": 6,
+        "juillet": 7, "july": 7, "août": 8, "aout": 8, "august": 8,
+        "septembre": 9, "september": 9, "octobre": 10, "october": 10,
+        "novembre": 11, "november": 11, "décembre": 12, "decembre": 12,
+        "december": 12, "jan": 1, "feb": 2, "mar": 3, "apr": 4,
+        "jun": 6, "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
     }
-    result = {**defaults, **data}
 
-    # Nettoyer phone
-    phone = result.get("phone")
-    if phone and re.fullmatch(r'\d{4}\s*[-–]\s*\d{4}|\d{4}', str(phone).strip()):
-        result["phone"] = None
+    def parse_date(s: str):
+        if not s:
+            return None
+        s = s.strip().lower()
+        # Détection "présent / actuel / current"
+        if any(w in s for w in ["présent", "present", "aujourd", "actuel",
+                                  "jusqu", "maintenant", "current", "now",
+                                  "ce jour", "ongoing", "en cours"]):
+            return datetime.now()
+        # Séparateur tiret ou em-dash (ex: "2020 — présent")
+        if "-" in s or "—" in s:
+            parts = re.split(r'[-—]', s)  # NOSONAR
+            for part in parts:
+                if any(w in part for w in ["présent", "present", "actuel", "current", "now"]):
+                    others = [p.strip() for p in parts
+                              if not any(w in p for w in ["présent", "present", "actuel", "current"])]
+                    if others:
+                        return parse_date(others[0])
+        # "mars 2022", "march 2022"
+        for mois_name, mois_num in MOIS.items():
+            if mois_name in s:
+                m = re.search(r'\b(19|20)\d{2}\b', s)  # NOSONAR
+                if m:
+                    return datetime(int(m.group()), mois_num, 1)
+        # "03/2022" ou "03-2022"
+        m = re.match(r'^(\d{1,2})[/\-](\d{4})$', s.strip())  # NOSONAR
+        if m and 1 <= int(m.group(1)) <= 12:
+            return datetime(int(m.group(2)), int(m.group(1)), 1)
+        # "2022/03"
+        m = re.match(r'^(\d{4})[/\-](\d{1,2})$', s.strip())  # NOSONAR
+        if m and 1 <= int(m.group(2)) <= 12:
+            return datetime(int(m.group(1)), int(m.group(2)), 1)
+        # Année seule "2022"
+        m = re.search(r'\b(19|20)\d{2}\b', s)  # NOSONAR
+        if m:
+            return datetime(int(m.group()), 1, 1)
+        return None
 
-    # SKILLS : si LLM en a moins de 3, prendre depuis le texte brut
-    if len(result["skills"]) < 3 and raw_text:
-        result["skills"] = _extract_skills_from_text(raw_text)
-    else:
-        soft = {"communication","teamwork","leadership","problem solving","autonomy","rigueur"}
-        seen = set()
-        cleaned = []
-        for s in result["skills"]:
-            if isinstance(s, str) and s.lower() not in soft and s not in seen:
-                seen.add(s)
-                cleaned.append(s)
-        result["skills"] = cleaned[:30]
+    exp       = extracted.get("experience") or {}
+    positions = exp.get("positions") or []
+    if not positions:
+        exp["total_months"] = 0
+        extracted["experience"] = exp
+        return extracted
 
-    # LANGUES : si LLM a retourné avec niveaux inventés, remplacer niveau par null
-    if raw_text:
-        text_langs = _extract_languages_from_text(raw_text)
-        if text_langs:
-            result["languages"] = text_langs
+    total = 0
+    for p in positions:
+        debut = parse_date(p.get("debut"))
+        fin   = parse_date(p.get("fin"))
+        if debut and fin and fin >= debut:
+            mois = max(1, (fin.year - debut.year) * 12 + (fin.month - debut.month))
+            p["duree_mois"] = mois
+            total += mois
+            log.info("   %s → %s = %d mois", p.get("debut"), p.get("fin"), mois)
         else:
-            for lang in result["languages"]:
-                if lang.get("level") and lang["level"] not in ["A1","A2","B1","B2","C1","C2"]:
-                    lang["level"] = None
-    else:
-        for lang in result["languages"]:
-            if lang.get("level") and lang["level"] not in ["A1","A2","B1","B2","C1","C2"]:
-                lang["level"] = None
+            p["duree_mois"] = 0
 
-    # CERTIFICATIONS : filtrer les hallucinations
-    bad_certs = {"aws certified", "aws certified developer", "certified", "scrum master", "pmp"}
-    real_certs = []
-    for c in result["certifications"]:
-        if c.lower() not in bad_certs and len(c) > 5:
-            real_certs.append(c)
-    if not real_certs and raw_text:
-        real_certs = _extract_certifications_from_text(raw_text)
-    result["certifications"] = real_certs[:10]
+    exp["total_months"] = total
+    extracted["experience"] = exp
+    log.info("   Total expérience recalculé : %d mois", total)
+    return extracted
 
-    # EDUCATION : si vide, utiliser extraction locale
-    if not result["education"] and raw_text:
-        result["education"] = _extract_education_from_text(raw_text)
 
-    # EXPERIENCE : si vide, utiliser extraction locale
-    if not result["experience"] and raw_text:
-        result["experience"] = _extract_experience_from_text(raw_text)
+# ═════════════════════════════════════════════════════════════════════════════
+# CONSTRUCTION DU PROMPT — Dynamique selon les prérequis du job
+# ═════════════════════════════════════════════════════════════════════════════
 
-    # yearsExperience : recalcul simple
-    total_years = 0.0
-    for ex in result["experience"]:
-        dur_str = ex.get("duration", "")
-        years = 0.0
-        if dur_str:
-            if re.search(r'\d{4}\s*[-–]\s*\d{4}', dur_str):
-                start, end = map(int, re.findall(r'\d{4}', dur_str)[:2])
-                years = end - start
-            elif re.search(r'\d{4}\s*[-–]\s*en cours', dur_str, re.IGNORECASE):
-                start = int(re.search(r'\d{4}', dur_str).group())
-                years = datetime.now().year - start
-        if years == 0 and dur_str:
-            # estimation grossière : un stage de quelques mois = 0.5
-            years = 0.5
-        if ex.get("type") == "stage":
-            total_years += years * 0.5
+# En-tête commun à toutes les requêtes d'extraction
+_EXTRACTION_HEADER = """\
+You are a strict CV data extractor. CV language: ANY (French, English, Arabic…).
+CV structure: ANY layout, ANY section names.
+
+GOLDEN RULE — EXPERIENCE:
+Include a position ONLY if it appears under a section explicitly named:
+"Expérience professionnelle", "Expérience", "Experience", "Work experience",
+"Emplois", "Parcours professionnel".
+ALWAYS EXCLUDE: Stages/Internships, Projets académiques, Formation/Education,
+Certifications, Clubs, Profil.
+If no such section exists → positions: [], total_months: 0
+
+IMPORTANT: Return ONLY valid JSON matching exactly the schema below. No markdown. No explanation.\
+"""
+
+# Instructions par type de champ (injectées dynamiquement selon les prérequis du job)
+_TASK_DEGREE = """\
+Find ALL education entries (Bac, BTS, DUT, Licence, Bachelor, Master, Ingénieur,
+Mastère, Cycle ingénieur, PhD, MBA — any language equivalent).
+For each: titre + annee. Select the most recent as main degree.\
+"""
+
+_TASK_EXPERIENCE = """\
+Apply GOLDEN RULE strictly.
+For each real job: titre, entreprise, debut, fin. Leave duree_mois: 0.\
+"""
+
+_TASK_LANGUAGE = """\
+All languages with level (natif/courant/bilingue/avancé/intermédiaire/débutant/A1-C2/null).\
+"""
+
+_TASK_CERTIFICATION = """\
+All certifications. If none → [].\
+"""
+
+_TASK_HARD_SKILLS = """\
+ALL technical skills: programming languages, frameworks, libraries, databases,
+cloud, tools, methodologies. Include everything technical found anywhere in the CV.\
+"""
+
+_TASK_SOFT_SKILLS = """\
+Behavioral traits only, ≤ 6 words each, max 8 items.
+Examples: "Leadership", "Communication", "Travail en équipe".
+EXCLUDE technical skills and long sentences.\
+"""
+
+
+def _primary_json_key(json_schema: str) -> str:
+    """Extrait la première clé d'un fragment de schéma JSON (ex: '"degree": ...' → 'degree')."""
+    m = re.match(r'\s*"([^"]+)"\s*:', json_schema.strip())
+    return m.group(1) if m else ""
+
+
+def _add_standard_field(fields: list, type_: str) -> None:
+    """Ajoute un champ standard (DEGREE / EXPERIENCE / LANGUAGE / CERTIFICATION) à la liste."""
+    if type_ == "DEGREE":
+        fields.append({
+            "name":        "degree",
+            "instruction": _TASK_DEGREE,
+            "json_schema": (
+                '"degree": {"titre": "string or null", "annee": "string or null"}, '
+                '"all_diplomas": [{"titre": "string", "annee": "string or null"}]'
+            ),
+        })
+    elif type_ == "EXPERIENCE":
+        fields.append({
+            "name":        "experience",
+            "instruction": _TASK_EXPERIENCE,
+            "json_schema": (
+                '"experience": {"total_months": 0, "positions": ['
+                '{"titre": "string", "entreprise": "string or null", '
+                '"debut": "string or null", "fin": "string or null", "duree_mois": 0}'
+                ']}'
+            ),
+        })
+    elif type_ == "LANGUAGE":
+        fields.append({
+            "name":        "languages",
+            "instruction": _TASK_LANGUAGE,
+            "json_schema": '"languages": [{"langue": "string", "niveau": "string or null"}]',
+        })
+    elif type_ == "CERTIFICATION":
+        fields.append({
+            "name":        "certifications",
+            "instruction": _TASK_CERTIFICATION,
+            "json_schema": '"certifications": ["string"]',
+        })
+
+
+def build_extraction_fields(prereqs: list, needs_hard: bool, needs_soft: bool) -> tuple:
+    """
+    Décide dynamiquement quels champs phi4 doit extraire, selon les prérequis du job.
+
+    Principe : n'extraire que ce que le job nécessite.
+    - Si le job a un prérequis DEGREE → ajouter le champ diplôme
+    - Si le job a un prérequis EXPERIENCE → ajouter le champ expérience
+    - etc.
+    - Sans prérequis (upload profil sans contexte job) → tout extraire
+    - Les prérequis custom (avec instruction+json_schema) sont toujours ajoutés
+    - hard_skills + soft_skills sont toujours ajoutés en dernier
+
+    Retourne :
+      fields     : liste de dicts {name, instruction, json_schema}
+      custom_map : dict {index_prereq → field_name} pour le scoring
+    """
+    fields:     list = []
+    custom_map: dict = {}
+    custom_ctr: int  = 0
+    seen:       set  = set()
+
+    # Champs standards pilotés par les types de prérequis
+    for prereq in prereqs:
+        ptype = (prereq.get("type") or "").upper()
+        if ptype in ("DEGREE", "EDUCATION") and "DEGREE" not in seen:
+            _add_standard_field(fields, "DEGREE")
+            seen.add("DEGREE")
+        elif ptype == "EXPERIENCE" and "EXPERIENCE" not in seen:
+            _add_standard_field(fields, "EXPERIENCE")
+            seen.add("EXPERIENCE")
+        elif ptype == "LANGUAGE" and "LANGUAGE" not in seen:
+            _add_standard_field(fields, "LANGUAGE")
+            seen.add("LANGUAGE")
+        elif ptype == "CERTIFICATION" and "CERTIFICATION" not in seen:
+            _add_standard_field(fields, "CERTIFICATION")
+            seen.add("CERTIFICATION")
+
+    # Sans prérequis → tout extraire (upload profil sans contexte job)
+    if not prereqs:
+        for ftype in ("DEGREE", "EXPERIENCE", "LANGUAGE", "CERTIFICATION"):
+            _add_standard_field(fields, ftype)
+
+    # Prérequis custom (définis par le RH avec instruction+json_schema personnalisés)
+    for i, prereq in enumerate(prereqs):
+        has_custom = bool(prereq.get("instruction") and prereq.get("json_schema"))
+        if has_custom:
+            fname = _primary_json_key(prereq["json_schema"]) or f"custom_prereq_{custom_ctr}"
+            custom_ctr += 1
+            custom_map[i] = fname
+            fields.append({
+                "name":        fname,
+                "instruction": prereq["instruction"],
+                "json_schema": prereq["json_schema"],
+            })
+
+    # hard_skills et soft_skills toujours présents (scoring skills)
+    if not any(f["name"] == "hard_skills" for f in fields):
+        fields.append({
+            "name":        "hard_skills",
+            "instruction": _TASK_HARD_SKILLS,
+            "json_schema": '"hard_skills": ["string"]',
+        })
+    if not any(f["name"] == "soft_skills" for f in fields):
+        fields.append({
+            "name":        "soft_skills",
+            "instruction": _TASK_SOFT_SKILLS,
+            "json_schema": '"soft_skills": ["string"]',
+        })
+
+    return fields, custom_map
+
+
+def build_prompt_from_fields(cv_text: str, fields: list) -> str:
+    """
+    Assemble le prompt final envoyé à phi4.
+
+    Structure du prompt :
+      1. _EXTRACTION_HEADER (règles fixes)
+      2. ### TASK 1 — NOM_DU_CHAMP\n instruction...  (une section par champ)
+      3. === EXPECTED JSON SCHEMA ===\n { ... }       (schéma exact attendu)
+      4. === CV TEXT ===\n texte_du_cv\n\nJSON:       (texte à analyser)
+
+    phi4 est configuré avec "format": "json" → il ne retourne que du JSON.
+    """
+    instructions = "\n\n".join(
+        f"### TASK {i} — {f['name'].upper()}\n{f['instruction'].strip()}"
+        for i, f in enumerate(fields, 1)
+    )
+    schema_body = ",\n  ".join(f["json_schema"] for f in fields)
+    schema_str  = "{\n  " + schema_body + "\n}"
+    return (
+        f"{_EXTRACTION_HEADER}\n\n"
+        + instructions
+        + f"\n\n=== EXPECTED JSON SCHEMA ===\n{schema_str}"
+        + f"\n\n=== CV TEXT ===\n{cv_text}\n\nJSON:"
+    )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# APPEL OLLAMA — Streaming phi4
+# ═════════════════════════════════════════════════════════════════════════════
+
+def call_qwen(prompt: str) -> str:
+    """
+    Envoie le prompt à phi4 via l'API Ollama en mode streaming.
+    Ollama retourne les tokens un par un (Server-Sent Events JSON).
+    On concatène jusqu'à recevoir {"done": true}.
+
+    Options clés :
+      num_predict : 900 tokens max en sortie (JSON CV ou jugement prérequis)
+      temperature : 0.0 → déterministe, pas de créativité
+      num_ctx     : 3072 → fenêtre de contexte
+      num_gpu     : 999 → utilise tout le GPU disponible
+    """
+    payload = {
+        "model":  QWEN_MODEL,
+        "prompt": prompt,
+        "format": "json",   # force phi4 à produire du JSON valide
+        "stream": True,
+        "options": {
+            "num_predict": 900,
+            "temperature": 0.0,
+            "num_ctx":     NUM_CTX,
+            "num_thread":  4,
+            "num_gpu":     999,
+        }
+    }
+    try:
+        resp = requests.post(OLLAMA_URL, json=payload, stream=True, timeout=300)
+        resp.raise_for_status()
+    except requests.exceptions.ConnectionError:
+        raise HTTPException(status_code=503, detail="Ollama indisponible")
+    except requests.exceptions.HTTPError as e:
+        log.error("Ollama HTTP error: %s", e)
+        raise HTTPException(status_code=503, detail=f"Ollama service error: {e}")
+
+    full_text = ""
+    for line in resp.iter_lines():
+        if line:
+            try:
+                data = json.loads(line)
+                full_text += data.get("response", "")
+                if data.get("done"):
+                    ec = data.get("eval_count", 0)
+                    ed = data.get("eval_duration", 0)
+                    if ed > 0:
+                        log.info("phi4: %d tokens @ %.1f t/s", ec, ec / (ed / 1e9))
+                    break
+            except json.JSONDecodeError:
+                continue
+    return full_text
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PARSING JSON ROBUSTE
+# ═════════════════════════════════════════════════════════════════════════════
+
+def extract_json(raw: str) -> dict:
+    """
+    Parse le JSON retourné par phi4 de manière robuste.
+    Gère les cas :
+      - Fences markdown (```json ... ```)
+      - Texte parasite avant/après le JSON
+      - Virgules trailing (,} ou ,])
+      - JSON tronqué (depth > 0 à la fin)
+    """
+    raw   = re.sub(r"```json\s*", "", raw)   # NOSONAR
+    raw   = re.sub(r"```\s*",     "", raw).strip()  # NOSONAR
+    start = raw.find("{")
+    if start == -1:
+        return {}
+
+    # Trouver l'accolade fermante correspondante
+    depth, end = 0, -1
+    for i, ch in enumerate(raw[start:], start):
+        if ch == "{":   depth += 1
+        elif ch == "}": depth -= 1
+        if depth == 0:
+            end = i + 1
+            break
+    if end == -1:
+        return {}
+
+    try:
+        return json.loads(raw[start:end])
+    except json.JSONDecodeError:
+        try:
+            # Tentative de correction des virgules trailing
+            cleaned = re.sub(r",\s*([}\]])", r"\1", raw[start:end])  # NOSONAR
+            return json.loads(cleaned)
+        except Exception:
+            return {}
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# SCORING — Skills (bge-m3 cosine similarity)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _cosine_max(query_emb: np.ndarray, candidates: list, embed_model) -> tuple:
+    """
+    Calcule la cosine similarity entre query_emb et chaque candidat,
+    retourne (meilleur_score, meilleur_candidat).
+
+    Vectorisé via NumPy : une seule opération matricielle embs @ query_emb
+    calcule tous les produits scalaires simultanément (bien plus rapide qu'une boucle).
+
+    Formule : cos(θ) = (A · B) / (‖A‖ × ‖B‖)
+    """
+    if not candidates or embed_model is None:
+        return 0.0, ""
+    embs   = embed_model.encode(candidates, show_progress_bar=False)
+    norms  = np.linalg.norm(embs, axis=1) + 1e-9   # +epsilon évite division par zéro
+    norm_q = np.linalg.norm(query_emb) + 1e-9
+    sims   = (embs @ query_emb) / (norms * norm_q)  # vecteur de scores
+    idx    = int(np.argmax(sims))
+    return float(sims[idx]), candidates[idx]
+
+
+def score_skill_vs_list(
+    skill_name:       str,
+    extracted_skills: list,
+    line_embs:        np.ndarray,
+    embed_model,
+    precomp_emb:      "np.ndarray | None" = None,
+) -> float:
+    """
+    Score un skill job contre les skills extraits du CV + les lignes brutes du texte.
+
+    3 niveaux de matching (par ordre de priorité) :
+      1. Match exact/ESCO/préfixe → score 1.0 immédiat
+      2. Cosine similarity contre la liste de skills extraits par phi4
+      3. Cosine similarity contre les lignes brutes (filet de sécurité si phi4 a raté)
+
+    Le score final est le max des deux sources de cosine.
+    precomp_emb : embedding pré-calculé depuis le cache job (évite un recalcul).
+    """
+    if not skill_name.strip() or embed_model is None:
+        return 0.0
+
+    # Priorité 1 : match normalisé (exact / ESCO / préfixe)
+    for extracted_skill in extracted_skills:
+        if skills_match(skill_name, extracted_skill):
+            log.info("   Match normalisé: '%s' == '%s'", skill_name, extracted_skill)
+            return 1.0
+
+    # Embedding du skill job (depuis cache ou calcul frais)
+    skill_emb = precomp_emb if precomp_emb is not None \
+        else embed_model.encode([skill_name], show_progress_bar=False)[0]
+    norm_s = np.linalg.norm(skill_emb) + 1e-9
+    best   = 0.0
+
+    # Source A : skills extraits par phi4
+    if extracted_skills:
+        embs  = embed_model.encode(extracted_skills, show_progress_bar=False)
+        norms = np.linalg.norm(embs, axis=1) + 1e-9
+        sims  = (embs @ skill_emb) / (norms * norm_s)
+        best  = max(best, float(np.max(sims)))
+
+    # Source B : lignes brutes du CV (fallback phi4)
+    if line_embs is not None and line_embs.shape[0] > 0:
+        norms_l = np.linalg.norm(line_embs, axis=1) + 1e-9
+        sims_l  = (line_embs @ skill_emb) / (norms_l * norm_s)
+        best    = max(best, float(np.max(sims_l)))
+
+    return best
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# SCORING — Prérequis (logique par type)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def score_prereq_from_extraction(
+    prereq:            dict,
+    extracted:         dict,
+    embed_model,
+    custom_field_name: str = None,
+    precomp_req_emb:   "np.ndarray | None" = None,
+) -> dict:
+    """
+    Score un prérequis job contre les données extraites du CV.
+
+    Logique par type :
+      EXPERIENCE   → ratio mois pertinents / mois requis (phi4 juge la pertinence domaine)
+      DEGREE       → phi4 juge l'équivalence niveau+domaine (Ingénieur == Bac+5)
+      LANGUAGE     → cosine similarity sur "langue niveau"
+      CERTIFICATION → phi4 juge l'équivalence (AWS Solutions Architect == AWS SA)
+      CUSTOM       → cosine similarity sur le champ custom extrait
+
+    Retourne un dict {type, requis, detecte, present, score}.
+    """
+    type_  = (prereq.get("type") or "").upper()
+    value  = (prereq.get("value") or "").strip()
+    result = {"type": type_, "requis": value, "detecte": None, "present": False, "score": 0.0}
+
+    if not value or embed_model is None:
+        return result
+
+    log.info("score_prereq: type='%s' value='%s' custom_field='%s'",
+             type_, value, custom_field_name)
+
+    # Embedding du prérequis (depuis cache ou calcul frais)
+    req_emb = precomp_req_emb if precomp_req_emb is not None \
+        else embed_model.encode([value], show_progress_bar=False)[0]
+
+    def cosine_max(candidates: list) -> tuple:
+        return _cosine_max(req_emb, [c for c in candidates if c and str(c).strip()], embed_model)
+
+    # ── Traitement via champ custom extrait par phi4 ──────────────────────────
+    if custom_field_name and custom_field_name in extracted:
+        field_val = extracted[custom_field_name]
+
+        if type_ == "EXPERIENCE":
+            if isinstance(field_val, dict):
+                positions = field_val.get("positions") or []
+                total_m   = field_val.get("total_months", 0)
+            else:
+                positions, total_m = [], 0
+
+            # Parsing de la durée requise ("2 ans", "18 mois", "2")
+            years_m  = re.search(r'(\d+)\s*an',    value, re.I)  # NOSONAR
+            months_m = re.search(r'(\d+)\s*mois',  value, re.I)  # NOSONAR
+            number_m = re.search(r'^\s*(\d+)\s*$', value.strip())  # NOSONAR
+            if years_m:
+                required = int(years_m.group(1)) * 12
+            elif months_m:
+                required = int(months_m.group(1))
+            elif number_m:
+                n = int(number_m.group(1))
+                required = n if n > 12 else n * 12
+            else:
+                required = 0
+
+            if required == 0:
+                result.update({"score": 1.0, "detecte": f"{total_m} mois / 0 mois requis", "present": True})
+                return result
+
+            if not positions:
+                score = min(1.0, total_m / required)
+                result.update({
+                    "score":   round(score, 4),
+                    "detecte": f"{total_m} mois / {required} mois requis",
+                    "present": score >= 1.0,
+                })
+                return result
+
+            # phi4 juge quels postes sont pertinents pour le domaine requis
+            domain_match = re.search(r'(?:en|in)\s+(.+)$', value, re.I)  # NOSONAR
+            domain       = domain_match.group(1).strip() if domain_match else value
+
+            positions_text = "\n".join([
+                f"- {p.get('titre', '?')} @ {p.get('entreprise', '?')} ({p.get('duree_mois', 0)} mois)"
+                for p in positions
+            ])
+
+            prompt = f"""You are a strict HR evaluator.
+
+Job requires experience in: "{domain}"
+
+Candidate positions:
+{positions_text}
+
+For each position decide if it is RELEVANT to "{domain}".
+Be semantic — understand synonyms and related roles:
+- "Cloud Infrastructure Lead" IS relevant to "DevOps Kubernetes Docker"
+- "SRE Site Reliability" IS relevant to "DevOps Kubernetes Docker"
+- "Scrum Master" IS relevant to "gestion de projet management"
+- "Product Owner" IS relevant to "gestion de projet management"
+- "Contrôleur de gestion" IS relevant to "finance comptabilité"
+- "Administrateur réseau" IS relevant to "cybersécurité"
+- "Security Analyst" IS relevant to "cybersécurité"
+
+Return ONLY valid JSON:
+{{
+  "relevant_positions": [
+    {{"titre": "string", "duree_mois": 0, "relevant": true or false, "reason": "string"}}
+  ]
+}}
+
+JSON:"""
+
+            raw               = call_qwen(prompt)
+            parsed            = extract_json(raw)
+            relevant_positions = parsed.get("relevant_positions", [])
+            relevant_months    = sum(
+                p.get("duree_mois", 0)
+                for p in relevant_positions
+                if p.get("relevant")
+            )
+            if not relevant_positions:
+                relevant_months = total_m
+
+            score = min(1.0, relevant_months / required)
+            log.info("EXPERIENCE: domain='%s' required=%d relevant=%d score=%.4f",
+                     domain, required, relevant_months, score)
+            result.update({
+                "score":   round(score, 4),
+                "detecte": f"{relevant_months} mois pertinents / {required} mois requis",
+                "present": score >= 1.0,
+            })
+            return result
+
+        elif type_ == "DEGREE":
+            if isinstance(field_val, dict):
+                titre = field_val.get("titre") or ""
+            elif isinstance(field_val, list):
+                titres = [d.get("titre", "") for d in field_val if isinstance(d, dict) and d.get("titre")]
+                titre  = titres[0] if titres else ""
+            else:
+                titre = str(field_val) if field_val else ""
+
+            if not titre:
+                result.update({"score": 0.0, "detecte": "", "present": False})
+                return result
+
+            # phi4 juge l'équivalence niveau académique + domaine
+            prompt = f"""You are a strict HR evaluator specialized in academic degrees.
+
+Job requires: "{value}"
+Candidate has: "{titre}"
+
+Academic levels (lowest to highest):
+Bac < BTS/DUT < Licence/Bachelor/Bac+3 < Master/Ingénieur/Mastère/Bac+5 < PhD/Doctorat
+
+IMPORTANT equivalences — these are EXACTLY the same level:
+- Ingénieur = Ingénieurie = Cycle ingénieur = Diplôme ingénieur = Bac+5 ingénieur
+- Master = Mastère = Bac+5 = M2 = DEA = DESS
+- Licence = Bachelor = Bac+3 = L3
+- BTS = DUT = Bac+2
+
+Rules:
+- Same level + same domain          → score 1.0   satisfied=true
+- Same level + close domain         → score 0.85  satisfied=true
+- Same level + different domain     → score 0.5   satisfied=false
+- Lower level + same domain         → score 0.2   satisfied=false
+- Lower level + different domain    → score 0.0   satisfied=false
+- Higher level than required        → score 1.0   satisfied=true
+
+Answer ONLY with valid JSON:
+{{"satisfied": true or false, "score": 0.0 to 1.0, "reason": "short explanation in French"}}
+
+JSON:"""
+
+            raw    = call_qwen(prompt)
+            parsed = extract_json(raw)
+            score   = round(float(parsed.get("score",    0.0)), 4)
+            present = bool(parsed.get("satisfied", False))
+            reason  = parsed.get("reason", titre)
+            log.info("DEGREE: value='%s' titre='%s' score=%.4f satisfied=%s", value, titre, score, present)
+            result.update({"score": score, "detecte": f"{titre} — {reason}", "present": present})
+            return result
+
+        elif type_ == "LANGUAGE":
+            if isinstance(field_val, list):
+                lang_texts = [
+                    f"{l.get('langue', '')} {l.get('niveau') or ''}".strip()
+                    for l in field_val if isinstance(l, dict)
+                ]
+            else:
+                lang_texts = [str(field_val)] if field_val else []
+            score, best = cosine_max(lang_texts) if lang_texts else (0.0, "")
+            result.update({"score": round(score, 4), "detecte": best, "present": score >= 0.55})
+            return result
+
+        elif type_ == "CERTIFICATION":
+            if isinstance(field_val, list):
+                certs = [str(c) for c in field_val if c]
+            elif field_val:
+                certs = [str(field_val)]
+            else:
+                certs = []
+
+            if not certs:
+                result.update({"score": 0.0, "detecte": "", "present": False})
+                return result
+
+            certs_str = ", ".join(certs)
+            prompt = f"""You are a strict HR evaluator specialized in professional certifications.
+
+Job requires certification: "{value}"
+Candidate has: "{certs_str}"
+
+Does the candidate have this certification or an equivalent one?
+Answer ONLY with valid JSON:
+{{"satisfied": true or false}}
+
+JSON:"""
+            raw    = call_qwen(prompt)
+            parsed = extract_json(raw)
+            present = bool(parsed.get("satisfied", False))
+            result.update({
+                "score":   1.0 if present else 0.0,
+                "detecte": certs_str,
+                "present": present,
+            })
+            return result
+
         else:
-            total_years += years
-    result["yearsExperience"] = round(total_years, 1) if total_years > 0 else 0
+            # Champ custom → cosine similarity directe
+            if isinstance(field_val, list):
+                candidates = [
+                    json.dumps(v, ensure_ascii=False) if isinstance(v, dict) else str(v)
+                    for v in field_val if v
+                ]
+            elif isinstance(field_val, dict):
+                candidates = [json.dumps(field_val, ensure_ascii=False)]
+            elif field_val:
+                candidates = [str(field_val)]
+            else:
+                candidates = []
+            score, best = cosine_max(candidates) if candidates else (0.0, "")
+            result.update({"score": round(score, 4), "detecte": best, "present": score >= 0.50})
+            return result
 
+    # ── Routing standard (sans champ custom) ─────────────────────────────────
+    if type_ in ("DEGREE", "EDUCATION"):
+        diplomas = extracted.get("all_diplomas") or []
+        titles   = [d.get("titre", "") for d in diplomas if d.get("titre")]
+        if not titles:
+            dt = (extracted.get("degree") or {}).get("titre")
+            if dt:
+                titles = [dt]
+        score, best = cosine_max(titles)
+        result.update({"score": round(score, 4), "detecte": best, "present": score >= 0.55})
+
+    elif type_ == "EXPERIENCE":
+        exp      = extracted.get("experience") or {}
+        total_m  = exp.get("total_months", 0)
+        years_m  = re.search(r'(\d+)\s*an',    value, re.I)   # NOSONAR
+        months_m = re.search(r'(\d+)\s*mois',  value, re.I)   # NOSONAR
+        number_m = re.search(r'^\s*(\d+)\s*$', value.strip())  # NOSONAR
+        if years_m:
+            required = int(years_m.group(1)) * 12
+        elif months_m:
+            required = int(months_m.group(1))
+        elif number_m:
+            n = int(number_m.group(1))
+            required = n if n > 12 else n * 12
+        else:
+            required = 0
+        score = 1.0 if required == 0 else min(1.0, total_m / required)
+        result.update({
+            "score":   round(score, 4),
+            "detecte": f"{total_m} mois / {required} mois requis",
+            "present": score >= 1.0,
+        })
+
+    elif type_ == "LANGUAGE":
+        langs      = extracted.get("languages") or []
+        lang_texts = [f"{l.get('langue', '')} {l.get('niveau') or ''}".strip() for l in langs]
+        score, best = cosine_max(lang_texts)
+        result.update({"score": round(score, 4), "detecte": best, "present": score >= 0.55})
+
+    elif type_ == "CERTIFICATION":
+        certs = extracted.get("certifications") or []
+        score, best = cosine_max([str(c) for c in certs])
+        result.update({"score": round(score, 4), "detecte": best, "present": score >= 0.55})
+
+    else:
+        all_skills = (extracted.get("hard_skills") or []) + (extracted.get("soft_skills") or [])
+        score, best = cosine_max(all_skills)
+        result.update({"score": round(score, 4), "detecte": best, "present": score >= 0.50})
+
+    log.info("score_prereq result: %s", result)
     return result
 
-# ─── OCR ──────────────────────────────────────────────────────────────────────
-async def _extract_via_ocr(pdf_bytes: bytes) -> dict:
-    try:
-        images = convert_from_bytes(pdf_bytes, dpi=300, poppler_path=POPPLER_PATH)
-        full_text = ""
-        for img in images:
-            page_text = pytesseract.image_to_string(img, lang='fra+eng', config='--psm 1')
-            if len(page_text.strip()) < 100:
-                page_text = pytesseract.image_to_string(img, lang='fra+eng', config='--psm 3')
-            full_text += page_text + "\n"
-        if len(full_text.strip()) < 50:
-            return None
-        return {"text": full_text}
-    except Exception as e:
-        logger.warning(f"OCR failed: {e}")
-        return None
 
-# ─── Routes ───────────────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════════════════
+# PIPELINE COMMUN — Extraction + Scoring (utilisé par /extract et /extract-text)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _run_pipeline(cv_text: str, prereqs: list, skills: list, job_id: str | None) -> dict:
+    """
+    Pipeline complet : texte brut → extraction phi4 → scoring bge-m3.
+
+    Étapes :
+      1. Préparation du texte (nettoyage + troncature)
+      2. Construction du prompt dynamique
+      3. Appel phi4 (Ollama)
+      4. Parse JSON + recalcul expérience
+      5. Encodage des lignes brutes en embeddings (filet de sécurité)
+      6. Scoring des skills (bge-m3 cosine)
+      7. Scoring des prérequis (phi4 juge + bge-m3 cosine selon type)
+
+    Retourne : {extracted, skills_evalues, prerequis_evalues}
+    """
+    needs_hard = any((s.get("type") or "").upper() != "SOFT" for s in skills)
+    needs_soft = any((s.get("type") or "").upper() == "SOFT" for s in skills)
+
+    # Récupération du cache d'embeddings job (pré-calculés via /index-job)
+    job_embs  = _job_embs_cache.get(job_id, {}) if job_id else {}
+    cache_hit = len(job_embs) > 0
+    log.info(
+        "Matching — %d prérequis, %d skills (hard=%s soft=%s) — job cache: %s (%d termes)",
+        len(prereqs), len(skills), needs_hard, needs_soft,
+        "HIT" if cache_hit else "MISS", len(job_embs)
+    )
+
+    # ── Phase 2 : Extraction LLM
+    text_for_qwen      = prepare_for_qwen(cv_text, max_chars=4000)
+    fields, custom_map = build_extraction_fields(prereqs, needs_hard, needs_soft)
+    prompt             = build_prompt_from_fields(text_for_qwen, fields)
+    try:
+        raw_qwen  = call_qwen(prompt)
+        extracted = extract_json(raw_qwen) or {}
+    except HTTPException:
+        log.warning("Ollama unavailable — using regex fallback extraction")
+        _lang_re = re.compile(
+            r'\b(english|french|arabic|german|spanish|italian|dutch|chinese|japanese)\b'
+            r'[\s:–\-]*([a-cA-C][12]|native|fluent|bilingual|professionnel|courant|notions)?',
+            re.I,
+        )
+        _languages: list = []
+        for _m in _lang_re.finditer(cv_text):
+            _label = f"{_m.group(1).capitalize()} {(_m.group(2) or '').strip()}".strip()
+            if _label not in _languages:
+                _languages.append(_label)
+
+        _diploma_re = re.compile(
+            r'\b(master\s*\d*|licence|bachelor|ing[eé]nieur|engineering|phd|doctorat'
+            r'|bts|dut|mba|m\.?s\.?c\.?|b\.?s\.?c\.?)\b',
+            re.I,
+        )
+        _diplomas = list({_m.group(0).strip().title() for _m in _diploma_re.finditer(cv_text)})
+
+        _cert_re = re.compile(
+            r'\b(aws|azure|gcp|pmp|cissp|itil|scrum|comptia|prince2|cka|ckad|tensorflow|pytorch)\b',
+            re.I,
+        )
+        _certs = list({_m.group(0).strip().upper() for _m in _cert_re.finditer(cv_text)})
+
+        extracted = {
+            "hard_skills":    [],
+            "soft_skills":    [],
+            "experience":     {"total_months": 0, "positions": []},
+            "degree":         _diplomas[0] if _diplomas else None,
+            "all_diplomas":   _diplomas,
+            "languages":      _languages,
+            "certifications": _certs,
+        }
+    extracted          = recalculate_experience(extracted)
+
+    log.info(
+        "EXTRACTION COMPLETE: hard_skills=%d diplomas=%d exp=%d mois",
+        len(extracted.get("hard_skills") or []),
+        len(extracted.get("all_diplomas") or []),
+        (extracted.get("experience") or {}).get("total_months", 0),
+    )
+    print("\n" + "═" * 60)
+    print("EXTRACTION CV COMPLÈTE")
+    print("═" * 60)
+    print(json.dumps(extracted, indent=2, ensure_ascii=False))
+    print("═" * 60 + "\n")
+
+    # ── Phase 3 : Encodage des lignes brutes (bge-m3)
+    paragraphs  = [p.strip() for p in re.split(r'\n{2,}', cv_text) if p.strip()] or [cv_text]  # NOSONAR
+    seen_lower: set  = set()
+    unique_lines: list = []
+    for para in paragraphs:
+        for seg in re.split(r'[,;\n]+', para):  # NOSONAR
+            seg = seg.strip()
+            if 2 <= len(seg) <= 80 and seg.lower() not in seen_lower:
+                seen_lower.add(seg.lower())
+                unique_lines.append(seg)
+
+    if _embed_model is not None and unique_lines:
+        line_embs: np.ndarray = _embed_model.encode(unique_lines, show_progress_bar=False)
+    else:
+        line_embs = np.zeros((0, 384))
+
+    # ── Scoring des skills
+    skills_evalues = []
+    for skill in skills:
+        nom        = (skill.get("nom") or skill.get("name") or "").strip()
+        skill_type = (skill.get("type") or "TECHNICAL").upper()
+        if not nom:
+            continue
+        extracted_list = extracted.get("soft_skills" if skill_type == "SOFT" else "hard_skills") or []
+        precomp        = job_embs.get(nom)
+        score = score_skill_vs_list(nom, extracted_list, line_embs, _embed_model, precomp)
+        log.info("'%s' type=%s score=%.4f%s", nom, skill_type, score,
+                 " [cached-emb]" if precomp is not None else "")
+        skills_evalues.append({
+            "nom":     nom,
+            "type":    skill_type,
+            "score":   round(score, 4),
+            "present": score >= 0.55,
+            "weight":  skill.get("weight", 1),
+        })
+
+    # ── Scoring des prérequis
+    prerequis_evalues = [
+        score_prereq_from_extraction(
+            p, extracted, _embed_model,
+            custom_field_name=custom_map.get(i),
+            precomp_req_emb=job_embs.get((p.get("value") or "").strip()),
+        )
+        for i, p in enumerate(prereqs)
+    ]
+
+    log.info("Matching terminé — %d skills, %d prérequis", len(skills_evalues), len(prerequis_evalues))
+    return {
+        "extracted":         extracted,
+        "skills_evalues":    skills_evalues,
+        "prerequis_evalues": prerequis_evalues,
+    }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# UTILITAIRES
+# ═════════════════════════════════════════════════════════════════════════════
+
+def compute_embeddings(terms: list) -> dict:
+    """Encode une liste de termes et retourne {terme: vecteur} (pour l'endpoint /embed)."""
+    if not terms or _embed_model is None:
+        return {}
+    vecs = _embed_model.encode(terms, show_progress_bar=False, convert_to_numpy=True)
+    return {term: vec.tolist() for term, vec in zip(terms, vecs)}
+
+
+def cosine_sim_np(a, b) -> float:
+    """
+    Cosine similarity entre deux vecteurs numpy.
+    Formule : cos(θ) = (A · B) / (‖A‖ × ‖B‖)
+    Retourne 0.0 si l'un des vecteurs est nul.
+    """
+    na, nb = np.linalg.norm(a), np.linalg.norm(b)
+    if na == 0 or nb == 0:
+        return 0.0
+    return float(np.dot(a, b) / (na * nb))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ENDPOINTS REST
+# ═════════════════════════════════════════════════════════════════════════════
+
 @app.get("/health")
 def health():
-    return {"status": "ok", "embedding": embedding_model is not None, "ollama_model": EXTRACTION_MODEL}
+    """Endpoint de santé — vérifie que le service est opérationnel."""
+    return {
+        "status":      "ok",
+        "model":       EMBED_MODEL,
+        "qwen":        QWEN_MODEL,
+        "pdfplumber":  _PDFPLUMBER_AVAILABLE,
+        "esco":        "enabled",
+        "cached_jobs": len(_job_embs_cache),
+    }
 
-@app.post("/encode-job")
-def encode_job(req: EncodeJobRequest):
-    full_text = "\n".join([req.title, req.department or "", req.description or "", req.experienceLevel or "",
-                           " ".join(s.get("name", "") for s in req.skills), " ".join(req.prerequisites)])
-    emb = _get_embedding(full_text)
-    if not emb:
-        raise HTTPException(503, "Embedding service unavailable")
-    return {"embedding": emb, "dims": len(emb)}
 
 @app.post("/extract")
-async def extract_cv(req: ExtractRequest):
-    if not req.text or len(req.text.strip()) < 10:
-        raise HTTPException(400, "CV text too short")
-    quality = _assess_ocr_quality(req.text)
-    logger.info(f"Quality: {quality}")
-    text_to_process = preprocess_cv_text(req.text)
-    llm_result = await _extract_cv_with_llm(text_to_process) if quality["usable"] else None
-    if llm_result:
-        entities = _validate_and_clean(llm_result, raw_text=text_to_process)
-        if not entities.get("name"):
-            entities["name"] = _extract_name(text_to_process)
-        if not entities.get("email"):
-            entities["email"] = _extract_email(text_to_process)
-        if not entities.get("phone"):
-            entities["phone"] = _extract_phone(text_to_process)
-    else:
-        # Fallback complet local
-        entities = {
-            "name": _extract_name(text_to_process),
-            "email": _extract_email(text_to_process),
-            "phone": _extract_phone(text_to_process),
-            "location": None,
-            "summary": None,
-            "yearsExperience": 0,
-            "skills": _extract_skills_from_text(text_to_process),
-            "languages": _extract_languages_from_text(text_to_process),
-            "certifications": _extract_certifications_from_text(text_to_process),
-            "education": _extract_education_from_text(text_to_process),
-            "experience": _extract_experience_from_text(text_to_process),
-        }
-        entities["yearsExperience"] = _validate_and_clean(entities, raw_text=text_to_process)["yearsExperience"]
-    embedding = _get_embedding(req.text[:4000])
-    return {"entities": entities, "embedding": embedding}
+async def extract(
+    fichier:           UploadFile = File(...),
+    job_prerequisites: str        = Form(default=None),
+    job_skills:        str        = Form(default=None),
+    job_id:            str        = Form(default=None),
+):
+    """
+    Endpoint principal : reçoit un PDF, le lit, l'extrait avec phi4 et le score avec bge-m3.
+    Appelé par hf.service.js → extractCVFromPDFBuffer() et matchCVToJobs().
+    """
+    data = await fichier.read()
+    if not data:
+        return {"texte_brut": "", "extracted": {}, "skills_evalues": [], "prerequis_evalues": []}
 
-@app.post("/extract-from-pdf")
-async def extract_from_pdf(file: UploadFile = File(...)):
-    if not file.filename.lower().endswith('.pdf'):
-        raise HTTPException(400, "File must be PDF")
-    contents = await file.read()
-    ocr_result = await _extract_via_ocr(contents)
-    if not ocr_result:
-        raise HTTPException(500, "OCR failed")
-    full_text = ocr_result["text"]
-    quality = _assess_ocr_quality(full_text)
-    text_to_process = preprocess_cv_text(full_text)
-    llm_result = await _extract_cv_with_llm(text_to_process) if quality["usable"] else None
-    if llm_result:
-        entities = _validate_and_clean(llm_result, raw_text=text_to_process)
-        if not entities.get("name"):
-            entities["name"] = _extract_name(text_to_process)
-        if not entities.get("email"):
-            entities["email"] = _extract_email(text_to_process)
-        if not entities.get("phone"):
-            entities["phone"] = _extract_phone(text_to_process)
-    else:
-        entities = {
-            "name": _extract_name(text_to_process),
-            "email": _extract_email(text_to_process),
-            "phone": _extract_phone(text_to_process),
-            "location": None,
-            "summary": None,
-            "yearsExperience": 0,
-            "skills": _extract_skills_from_text(text_to_process),
-            "languages": _extract_languages_from_text(text_to_process),
-            "certifications": _extract_certifications_from_text(text_to_process),
-            "education": _extract_education_from_text(text_to_process),
-            "experience": _extract_experience_from_text(text_to_process),
-        }
-        entities["yearsExperience"] = _validate_and_clean(entities, raw_text=text_to_process)["yearsExperience"]
-    embedding = _get_embedding(full_text[:4000])
-    return {"entities": entities, "embedding": embedding, "ocr_text": full_text}
+    text = read_cv(data, fichier.filename or "cv.pdf")
+    if not text.strip():
+        log.warning("CV illisible — retour structure vide")
+        return {"texte_brut": "", "extracted": {}, "skills_evalues": [], "prerequis_evalues": []}
 
-@app.post("/analyze")
-async def analyze(req: AnalyzeRequest):
-    prompt = f"CV summary:\n{req.cv[:1200]}\n\nJob:\n{req.job[:600]}\n\nMatch score: {req.score}%\n\nIn 3 sentences: candidate strengths and key missing skills. Be concise."
-    try:
-        async with httpx.AsyncClient(timeout=45) as client:
-            r = await client.post(
-                f"{OLLAMA_URL}/api/generate",
-                json={
-                    "model": ANALYSIS_MODEL,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {"temperature": 0.3, "num_predict": 200, "num_ctx": 1024}
-                }
-            )
-        return {"analysis": r.json().get("response")}
-    except Exception as e:
-        logger.warning(f"Analyze failed: {e}")
-        return {"analysis": None}
+    prereqs: list = []
+    if job_prerequisites:
+        try:
+            prereqs = json.loads(job_prerequisites) or []
+        except json.JSONDecodeError:
+            pass
+
+    skills: list = []
+    if job_skills:
+        try:
+            skills = json.loads(job_skills) or []
+        except json.JSONDecodeError:
+            pass
+
+    result               = _run_pipeline(text, prereqs, skills, job_id)
+    result["texte_brut"] = text[:5000]
+    return result
+
+
+class ExtractTextRequest(BaseModel):
+    text:              str
+    job_skills:        list = []
+    job_prerequisites: list = []
+    job_id:            str | None = None
+
+
+@app.post("/extract-text")
+async def extract_from_text(req: ExtractTextRequest):
+    """
+    Même pipeline que /extract mais depuis un texte brut (pas de PDF).
+    Appelé par hf.service.js → extractCVData() et matchCVToJobs() sans pdfBuffer.
+    """
+    text = (req.text or "").strip()
+    if not text:
+        return {"texte_brut": "", "extracted": {}, "skills_evalues": [], "prerequis_evalues": []}
+    result               = _run_pipeline(text, req.job_prerequisites or [], req.job_skills or [], req.job_id)
+    result["texte_brut"] = text[:5000]
+    return result
+
+
+class ScoreSkillsRequest(BaseModel):
+    cv_hard_skills:    list = []
+    cv_soft_skills:    list = []
+    cv_raw_text:       str  = ""
+    cv_extracted:      dict = {}
+    job_skills:        list = []
+    job_prerequisites: list = []
+    job_id:            str  = ""
+
+
+@app.post("/score-skills")
+async def score_skills_endpoint(req: ScoreSkillsRequest):
+    """
+    Scoring bge-m3 uniquement, sans appel LLM.
+    Utilisé pour les recommandations de jobs (CV déjà extrait, pas besoin de re-extraire).
+    Appelé par hf.service.js → scoreSkillsForJob().
+    """
+    raw_lines = [l.strip() for l in req.cv_raw_text.split('\n') if l.strip()][:200]
+    if _embed_model is not None and raw_lines:
+        line_embs = _embed_model.encode(raw_lines, show_progress_bar=False)
+    else:
+        line_embs = np.zeros((0, 384))
+
+    skills_evalues = []
+    for skill in req.job_skills:
+        nom = (skill.get("nom") or skill.get("name") or "").strip()
+        if not nom:
+            continue
+        skill_type = (skill.get("type") or "TECHNICAL").upper()
+        cv_list    = req.cv_soft_skills if skill_type == "SOFT" else req.cv_hard_skills
+        score      = score_skill_vs_list(nom, cv_list, line_embs, _embed_model, None)
+        log.info("score-skills: '%s' type=%s score=%.4f", nom, skill_type, score)
+        skills_evalues.append({
+            "nom":     nom,
+            "type":    skill_type,
+            "score":   round(score, 4),
+            "present": score >= 0.55,
+            "weight":  skill.get("weight", 1),
+        })
+
+    prereq_evalues = [
+        score_prereq_from_extraction(p, req.cv_extracted, _embed_model)
+        for p in req.job_prerequisites
+    ]
+
+    return {"skills_evalues": skills_evalues, "prerequis_evalues": prereq_evalues}
+
+
+class IndexJobRequest(BaseModel):
+    job_id:        str
+    skills:        list
+    prerequisites: list
+
+
+@app.post("/index-job")
+def index_job(req: IndexJobRequest):
+    """
+    Pré-calcule et met en cache les embeddings bge-m3 de tous les skills et prérequis du job.
+    Appelé une seule fois à la création du job (hf.service.js → encodeJobSkills).
+    Évite de recalculer les mêmes embeddings à chaque candidature.
+    """
+    if _embed_model is None:
+        raise HTTPException(status_code=503, detail="Modèle non chargé.")
+
+    terms = []
+    for s in req.skills:
+        t = (s.get("nom") or s.get("name") or "").strip()
+        if t:
+            terms.append(t)
+    for p in req.prerequisites:
+        v = (p.get("value") or "").strip()
+        if v:
+            terms.append(v)
+
+    seen: set = set()
+    unique_terms = [t for t in terms if not (t in seen or seen.add(t))]
+
+    if not unique_terms:
+        _job_embs_cache[req.job_id] = {}
+        return {"job_id": req.job_id, "indexed": 0}
+
+    embs = _embed_model.encode(unique_terms, show_progress_bar=False)
+    _job_embs_cache[req.job_id] = {t: embs[i] for i, t in enumerate(unique_terms)}
+
+    log.info("/index-job: job=%s — %d termes indexés", req.job_id, len(unique_terms))
+    return {"job_id": req.job_id, "indexed": len(unique_terms)}
+
+
+@app.delete("/index-job/{job_id}")
+def delete_job_index(job_id: str):
+    """Supprime les embeddings d'un job du cache mémoire (appelé à la suppression du job)."""
+    removed = job_id in _job_embs_cache
+    _job_embs_cache.pop(job_id, None)
+    log.info("/index-job/%s supprimé du cache (%s)", job_id, "ok" if removed else "absent")
+    return {"job_id": job_id, "removed": removed}
+
+
+@app.get("/index-job/status")
+def index_job_status():
+    """Retourne l'état du cache d'embeddings (nombre de jobs indexés et leurs tailles)."""
+    return {
+        "cached_jobs": len(_job_embs_cache),
+        "jobs":        {jid: len(embs) for jid, embs in _job_embs_cache.items()},
+    }
+
+
+class EmbedRequest(BaseModel):
+    textes: list
+
+
+@app.post("/embed")
+def embed(req: EmbedRequest):
+    """Encode une liste de textes en vecteurs bge-m3 (usage général)."""
+    if not req.textes:
+        return {"embeddings": {}}
+    return {"embeddings": compute_embeddings(req.textes)}
+
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
+    uvicorn.run(app, host=os.getenv("BIND_HOST", "127.0.0.1"), port=int(os.getenv("PORT", 8000)))

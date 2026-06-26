@@ -110,6 +110,31 @@
           <h2 class="panel-title">Test Overview</h2>
           <p class="panel-desc">A summary of all themes and their configurations.</p>
 
+          <!-- Duration setting -->
+          <div class="duration-card">
+            <div class="duration-card-left">
+              <span class="material-icons duration-icon">timer</span>
+              <div>
+                <div class="duration-title">Test Duration</div>
+                <div class="duration-sub">Leave empty for unlimited time</div>
+              </div>
+            </div>
+            <div class="duration-card-right">
+              <input
+                type="number" class="duration-input"
+                min="1" max="600"
+                [ngModel]="draftDuration"
+                (ngModelChange)="onDurationChange($event)"
+                placeholder="—"
+                [disabled]="!isEditable()" />
+              <span class="duration-unit">min</span>
+              <span class="duration-status" *ngIf="isEditable()">
+                <span *ngIf="durationSaving" class="dur-saving">saving…</span>
+                <span *ngIf="durationSaved"  class="dur-saved">✓ saved</span>
+              </span>
+            </div>
+          </div>
+
           <div *ngFor="let theme of test.themes" class="overview-card">
             <div class="ov-card-head">
               <div class="ov-icon-wrap">
@@ -161,7 +186,7 @@
             <div class="cat-grid">
               <button *ngFor="let cat of categories"
                       class="cat-btn" [class.selected]="newThemeCategory === cat"
-                      (click)="newThemeCategory = cat">
+                      (click)="onCategorySelect(cat)">
                 <span class="material-icons">{{ CATEGORY_META[cat].icon }}</span>
                 {{ CATEGORY_META[cat].label }}
               </button>

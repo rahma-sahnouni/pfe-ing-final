@@ -80,21 +80,21 @@ export class RegisterComponent implements OnInit {
     this.authService.register(email, password, role, name.trim()).subscribe({
       next: () => {
         this.isLoading = false;
-        this.successMessage = 'Compte créé avec succès. Redirection...';
+        this.successMessage = 'Account created successfully. Redirecting...';
         setTimeout(() => this.router.navigate(['/login']), 2000);
       },
       error: (err) => {
         this.isLoading = false;
         const status = err.status;
         if (status === 409) {
-          this.errorMessage = 'Un compte avec cet email existe déjà.';
+          this.errorMessage = 'An account with this email already exists.';
         } else if (status === 422) {
           const msgs = err.error?.errors;
-          this.errorMessage = Array.isArray(msgs) ? msgs[0] : 'Données invalides. Vérifiez le formulaire.';
+          this.errorMessage = Array.isArray(msgs) ? msgs[0] : 'Invalid data. Please check the form.';
         } else if (status === 429) {
-          this.errorMessage = "Trop de tentatives d'inscription. Réessayez dans 1 heure.";
+          this.errorMessage = 'Too many registration attempts. Please try again in 1 hour.';
         } else {
-          this.errorMessage = err.error?.message || "Erreur lors de l'inscription.";
+          this.errorMessage = err.error?.message || 'Registration failed. Please try again.';
         }
       }
     });

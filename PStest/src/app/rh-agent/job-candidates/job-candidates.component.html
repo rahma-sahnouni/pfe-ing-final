@@ -115,9 +115,16 @@
             </div>
           </td>
           <td>
-            <span class="status-badge" [ngClass]="getStatusClass(c.applicationStatus)">
-              {{ c.applicationStatus || 'Pending' }}
-            </span>
+            <select class="status-select" [ngClass]="getStatusClass(c.applicationStatus)"
+                    [value]="c.applicationStatus || 'Pending'"
+                    (change)="changeStatus(c, $any($event.target).value)">
+              <option value="Pending">Pending</option>
+              <option value="In Review">In Review</option>
+              <option value="RH Interview">RH Interview</option>
+              <option value="Tech Interview">Tech Interview</option>
+              <option value="Accepted">Accepted</option>
+              <option value="Rejected">Rejected</option>
+            </select>
           </td>
           <td>
             <div class="action-row">
@@ -152,7 +159,7 @@
         <h2 class="panel-name">{{ selectedCandidate.name || selectedCandidate.email }}</h2>
         <div class="panel-badges">
           <span class="match-badge" [ngClass]="getScoreClass(selectedCandidate.aiMatchScore)">
-            Match {{ selectedCandidate.aiMatchScore !== null ? selectedCandidate.aiMatchScore + '%' : 'N/A' }}
+            {{ getScoreLabel(selectedCandidate.aiMatchScore) }}
           </span>
           <span class="cv-badge" *ngIf="selectedCandidate.cv">📄 CV attached</span>
         </div>
@@ -187,9 +194,16 @@
         </div>
         <div class="prow">
           <span class="plbl">Status</span>
-          <span class="status-badge" [ngClass]="getStatusClass(selectedCandidate.applicationStatus)">
-            {{ selectedCandidate.applicationStatus || 'Pending' }}
-          </span>
+          <select class="status-select" [ngClass]="getStatusClass(selectedCandidate.applicationStatus)"
+                  [value]="selectedCandidate.applicationStatus || 'Pending'"
+                  (change)="changeStatus(selectedCandidate, $any($event.target).value)">
+            <option value="Pending">Pending</option>
+            <option value="In Review">In Review</option>
+            <option value="RH Interview">RH Interview</option>
+            <option value="Tech Interview">Tech Interview</option>
+            <option value="Accepted">Accepted</option>
+            <option value="Rejected">Rejected</option>
+          </select>
         </div>
         <div class="prow" *ngIf="selectedCandidate.appliedDate">
           <span class="plbl">Applied</span>
@@ -209,52 +223,28 @@
     <!-- AI Match Tab -->
     <div class="panel-body" *ngIf="panelTab === 'aimatch'">
 
-      <!-- Big Score Ring -->
-      <div class="big-score-wrap">
-        <svg class="ring-svg" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
-          <circle class="ring-bg" cx="60" cy="60" r="50" />
-          <circle class="ring-fill"
-            cx="60" cy="60" r="50"
-            [ngClass]="getScoreClass(selectedCandidate.aiMatchScore)"
-            [style.stroke-dasharray]="getCircleDash(selectedCandidate.aiMatchScore)"
-            stroke-dashoffset="0" />
-        </svg>
-        <div class="ring-center">
-          <span class="ring-num">{{ selectedCandidate.aiMatchScore !== null ? selectedCandidate.aiMatchScore : 'N/A' }}</span>
-          <span class="ring-denom" *ngIf="selectedCandidate.aiMatchScore !== null">/ 100</span>
-        </div>
-        <div class="ring-label" [ngClass]="getScoreClass(selectedCandidate.aiMatchScore)">
-          {{ getScoreLabel(selectedCandidate.aiMatchScore) }}
-        </div>
-      </div>
-
-      <!-- Score by Dimension -->
-      <div class="dimensions-section" *ngIf="scoreDimensions(selectedCandidate).length > 0">
-        <h4>SCORE BY DIMENSION</h4>
-        <div class="dim-list">
-          <div class="dim-row" *ngFor="let d of scoreDimensions(selectedCandidate)">
-            <span class="dim-name">{{ d.label }}</span>
-            <div class="dim-bar-wrap">
-              <div class="dim-bar" [style.width.%]="d.value" [ngClass]="d.color"></div>
-            </div>
-            <span class="dim-pct">{{ d.value }}%</span>
+      <!-- All Matched -->
+      <div class="match-group matched-group" *ngIf="getAllMatched(selectedCandidate).length > 0">
+        <h4>✅ MATCHED</h4>
+        <div class="prereq-list">
+          <div class="prereq-item" *ngFor="let item of getAllMatched(selectedCandidate)">
+            <span class="prereq-icon">{{ prereqIcon(item.type) }}</span>
+            <span class="prereq-label">{{ item.label }}</span>
+            <span class="prereq-type">{{ item.type }}</span>
           </div>
         </div>
       </div>
 
-      <!-- Matched Skills -->
-      <div class="match-skills-section" *ngIf="getMatchedSkills(selectedCandidate).length > 0">
-        <h4>✅ MATCHED SKILLS</h4>
-        <div class="skills-cloud">
-          <span class="skill-tag matched" *ngFor="let s of getMatchedSkills(selectedCandidate)">{{ s }}</span>
-        </div>
-      </div>
-
-      <!-- Missing Skills -->
-      <div class="miss-skills-section" *ngIf="getMissingSkills(selectedCandidate).length > 0">
-        <h4>❌ MISSING SKILLS</h4>
-        <div class="skills-cloud">
-          <span class="skill-tag missing" *ngFor="let s of getMissingSkills(selectedCandidate)">{{ s }}</span>
+      <!-- All Missing -->
+      <div class="match-group missing-group" *ngIf="getAllMissing(selectedCandidate).length > 0">
+        <h4>❌ MISSING</h4>
+        <div class="prereq-list">
+          <div class="prereq-item missing" *ngFor="let item of getAllMissing(selectedCandidate)">
+            <span class="prereq-icon">{{ prereqIcon(item.type) }}</span>
+            <span class="prereq-label">{{ item.label }}</span>
+            <span class="prereq-type">{{ item.type }}</span>
+            <span class="obligatory-badge" *ngIf="item.obligatory">required</span>
+          </div>
         </div>
       </div>
 

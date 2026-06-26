@@ -24,6 +24,23 @@
 
     <div class="ct-test-tech">
 
+      <!-- Sticky anti-cheat monitor -->
+      <div class="ct-ac-monitor"
+           *ngIf="!submitted"
+           [class.ac-warn]="antiCheatRisk === 'medium'"
+           [class.ac-danger]="antiCheatRisk === 'high'">
+        <span class="material-icons ct-ac-icon">shield</span>
+        <div class="ct-ac-timer" *ngIf="timer">
+          <span class="material-icons ct-ac-timer-icon">timer</span>
+          <span class="ct-ac-timer-val">{{ formatTime(timer.remaining) }}</span>
+        </div>
+        <span class="ct-ac-label" *ngIf="!timer">Monitoring</span>
+        <div class="ct-ac-events" *ngIf="antiCheatCount > 0">
+          <span class="ct-ac-count">{{ antiCheatCount }} event{{ antiCheatCount > 1 ? 's' : '' }}</span>
+          <span class="ct-ac-badge">{{ antiCheatRisk.toUpperCase() }}</span>
+        </div>
+      </div>
+
       <!-- Header -->
       <div class="ct-test-header">
         <div class="ct-flex-row ct-test-meta">
@@ -38,13 +55,6 @@
         <p class="ct-test-desc" *ngIf="jobOffer">
           Position: <strong>{{ jobOffer.title }}</strong>
         </p>
-
-        <!-- Timer -->
-        <div class="ct-timer" *ngIf="timer" [class.ct-timer--danger]="timerDanger">
-          <span class="ct-timer-icon">⏱</span>
-          <span class="ct-timer-val">{{ formatTime(timer.remaining) }}</span>
-          <span class="ct-timer-label"> remaining</span>
-        </div>
 
         <!-- Progress Bar -->
         <div class="ct-progress-wrap">
